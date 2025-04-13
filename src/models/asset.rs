@@ -1,5 +1,6 @@
 use super::Ticker;
 
+#[derive(Debug)]
 pub struct Asset {
     name: String,
     asset_type: AssetType,
@@ -10,6 +11,7 @@ pub struct Asset {
     industry: Option<String>,
 }
 
+#[derive(Debug)]
 pub enum AssetType {
     Stock,
     Bond,

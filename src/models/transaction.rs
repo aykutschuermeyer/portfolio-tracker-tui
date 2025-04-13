@@ -3,6 +3,7 @@ use rust_decimal::Decimal;
 
 use super::Asset;
 
+#[derive(Debug)]
 pub struct Transaction {
     date: DateTime<Local>,
     transaction_type: TransactionType,
@@ -14,6 +15,7 @@ pub struct Transaction {
     fees: Decimal,
 }
 
+#[derive(Debug)]
 pub enum TransactionType {
     Buy,
     Sell,

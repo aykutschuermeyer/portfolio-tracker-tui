@@ -1,5 +1,9 @@
-use crate::models::{quote::Quote, ticker::Ticker};
+use std::path::Path;
+
+use crate::models::{Asset, AssetType, Quote, Ticker, Transaction, TransactionType};
 use anyhow::Result;
+use chrono::{Local, NaiveDate, TimeZone};
+use csv::Reader;
 use reqwest::Client;
 use rust_decimal::Decimal;
 
@@ -73,5 +77,50 @@ impl PortfolioTrackerService {
         } else {
             Err(anyhow::anyhow!("No quote data found"))
         }
+    }
+
+    pub fn read_transactions<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Transaction>> {
+        let mut reader = Reader::from_path(path)?;
+        let mut transactions = Vec::new();
+
+        for result in reader.records() {
+            let record = result?;
+            let date = NaiveDate::parse_from_str(&record[0], "%Y-%m-%d")?;
+            let date = Local
+                .from_local_datetime(&date.and_hms_opt(0, 0, 0).unwrap())
+                .single()
+                .ok_or_else(|| anyhow::anyhow!("Invalid date"))?;
+
+            let transaction_type = match &record[1] {
+                "Buy" => TransactionType::Buy,
+                "Sell" => TransactionType::Sell,
+                "Div" => TransactionType::Div,
+                _ => return Err(anyhow::anyhow!("Invalid transaction type")),
+            };
+
+            let symbol = record[2].to_string();
+            let quantity = record[3].parse::<Decimal>()?;
+            let price = record[4].parse::<Decimal>()?;
+            let fees = record[5].parse::<Decimal>()?;
+
+            // Create a temporary Ticker for the transaction
+            let ticker = Ticker::new(symbol.clone(), "USD".to_string(), "".to_string());
+            let asset = Asset::new(symbol, AssetType::Stock, ticker, None, None, None, None);
+
+            let transaction = Transaction::new(
+                date,
+                transaction_type,
+                asset,
+                "".to_string(),    // broker
+                "USD".to_string(), // currency
+                quantity,
+                price,
+                fees,
+            );
+
+            transactions.push(transaction);
+        }
+
+        Ok(transactions)
     }
 }

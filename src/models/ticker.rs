@@ -1,5 +1,4 @@
-use rust_decimal::Decimal;
-
+#[derive(Debug)]
 pub struct Ticker {
     symbol: String,
     currency: String,
