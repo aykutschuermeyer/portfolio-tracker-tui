@@ -21,7 +21,7 @@ pub struct GlobalQuote {
 }
 
 impl Ticker {
-    pub fn new(symbol: String, currency: String, exchange: String) -> Self {
+    pub fn new(symbol: String, currency: String, exchange: String, price: Option<Decimal>) -> Self {
         Self {
             symbol,
             currency,

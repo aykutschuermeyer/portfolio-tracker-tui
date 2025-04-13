@@ -1,0 +1,3 @@
+date,transaction_type,isin,quantity,price,fees,currency
+2025-02-12,Buy,US88160R1014,10,309.0,10,EUR
+2025-01-21,Buy,US01609W1027,100,81.8,10,EUR

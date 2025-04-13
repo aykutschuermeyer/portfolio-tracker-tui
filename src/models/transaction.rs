@@ -9,7 +9,7 @@ pub struct Transaction {
     asset: Asset,
     broker: String,
     currency: String,
-    amount: Decimal,
+    quantity: Decimal,
     price: Decimal,
     fees: Decimal,
 }
@@ -27,7 +27,7 @@ impl Transaction {
         asset: Asset,
         broker: String,
         currency: String,
-        amount: Decimal,
+        quantity: Decimal,
         price: Decimal,
         fees: Decimal,
     ) -> Self {
@@ -37,7 +37,7 @@ impl Transaction {
             asset,
             broker,
             currency,
-            amount,
+            quantity,
             price,
             fees,
         }
