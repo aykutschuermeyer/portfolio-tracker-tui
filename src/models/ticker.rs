@@ -1,14 +1,16 @@
 #[derive(Debug)]
 pub struct Ticker {
     symbol: String,
+    name: String,
     currency: String,
     exchange: String,
 }
 
 impl Ticker {
-    pub fn new(symbol: String, currency: String, exchange: String) -> Self {
+    pub fn new(symbol: String, name: String, currency: String, exchange: String) -> Self {
         Self {
             symbol,
+            name,
             currency,
             exchange,
         }
@@ -16,6 +18,10 @@ impl Ticker {
 
     pub fn symbol(&self) -> &str {
         &self.symbol
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn currency(&self) -> &str {

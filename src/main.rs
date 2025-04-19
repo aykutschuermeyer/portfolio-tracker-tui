@@ -1,17 +1,13 @@
-use anyhow::Result;
-use portfolio_tracker_tui::services::portfolio_tracker_service::PortfolioTrackerService;
+use portfolio_tracker_tui::app::Portfolio;
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    let api_key = std::env::var("ALPHA_VANTAGE_API_KEY")
-        .expect("Missing environment variable ALPHA_VANTAGE_API_KEY");
+async fn main() {
+    let mut portfolio = Portfolio::new();
 
-    let service = PortfolioTrackerService::new(api_key);
-    let transactions = service.read_transactions("sample_data/transactions.csv")?;
+    let result = portfolio
+        .import_transactions("sample_data/transactions.csv")
+        .await
+        .unwrap_or(false);
 
-    for transaction in transactions {
-        println!("Transaction: {:?}", transaction);
-    }
-
-    Ok(())
+    println!("Success: {}", result);
 }
