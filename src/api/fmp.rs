@@ -7,9 +7,16 @@ use serde_json::Value;
 
 const BASE_URL: &str = "https://financialmodelingprep.com/stable";
 
+#[derive(Clone, Debug)]
 pub struct FmpApi {
     client: Client,
     api_key: String,
+}
+
+impl Default for FmpApi {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FmpApi {

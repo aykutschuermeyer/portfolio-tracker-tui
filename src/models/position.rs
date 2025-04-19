@@ -1,7 +1,9 @@
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 use super::Asset;
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Position {
     asset: Asset,
     quantity: Decimal,

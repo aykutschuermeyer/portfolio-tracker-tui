@@ -8,6 +8,7 @@ use chrono::{Local, TimeZone};
 use csv::Reader;
 use rust_decimal::Decimal;
 
+#[derive(Clone, Debug, Default)]
 pub struct Portfolio {
     transactions: Vec<Transaction>,
     positions: Vec<Position>,

@@ -1,6 +1,7 @@
 use super::Ticker;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Asset {
     name: String,
     asset_type: AssetType,
@@ -11,7 +12,7 @@ pub struct Asset {
     industry: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum AssetType {
     Stock,
     Bond,

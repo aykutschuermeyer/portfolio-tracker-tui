@@ -1,9 +1,10 @@
 use chrono::{DateTime, Local};
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 use super::Asset;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Transaction {
     date: DateTime<Local>,
     transaction_type: TransactionType,
@@ -15,7 +16,7 @@ pub struct Transaction {
     fees: Decimal,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum TransactionType {
     Buy,
     Sell,
