@@ -1,7 +1,8 @@
+use derive_getters::Getters;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Getters, PartialEq, Serialize)]
 pub struct Quote {
     symbol: String,
     open: Decimal,
@@ -40,9 +41,5 @@ impl Quote {
             change,
             change_percent,
         }
-    }
-
-    pub fn price(&self) -> &Decimal {
-        &self.price
     }
 }

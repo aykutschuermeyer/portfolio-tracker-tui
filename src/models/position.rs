@@ -1,10 +1,10 @@
+use derive_getters::Getters;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
 use super::Asset;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Getters, PartialEq, Serialize)]
 pub struct Position {
     asset: Asset,
     quantity: Decimal,

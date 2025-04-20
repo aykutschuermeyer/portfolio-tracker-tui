@@ -1,8 +1,9 @@
+use derive_getters::Getters;
 use serde::{Deserialize, Serialize};
 
 use super::Ticker;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Getters, PartialEq, Serialize)]
 pub struct Asset {
     name: String,
     asset_type: AssetType,
@@ -40,17 +41,5 @@ impl Asset {
             sector,
             industry,
         }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn asset_type(&self) -> &AssetType {
-        &self.asset_type
-    }
-
-    pub fn tickers(&self) -> &Vec<Ticker> {
-        &self.tickers
     }
 }

@@ -2,7 +2,6 @@ use crate::{
     api::FmpApi,
     models::{Asset, AssetType, Position, Transaction, TransactionType},
 };
-use anyhow::{Error, Result};
 use chrono::{Local, TimeZone};
 use csv::Reader;
 use rust_decimal::Decimal;
@@ -166,7 +165,7 @@ impl Portfolio {
 
             if let Some(last_transaction) = transactions.last() {
                 let asset = last_transaction.asset().clone();
-                let current_price = asset.tickers()[0].last_price().unwrap_or(&Decimal::ZERO);
+                let current_price = asset.tickers()[0].last_price().unwrap_or(Decimal::ZERO);
                 let market_value = current_price * total_quantity;
                 let unrealized_gain = market_value - total_cost;
                 let unrealized_gain_percent = if total_cost > Decimal::ZERO {
@@ -180,7 +179,7 @@ impl Portfolio {
                 let position = Position::new(
                     asset.clone(),
                     total_quantity,
-                    *current_price,
+                    current_price,
                     market_value,
                     cost_per_share,
                     total_cost,

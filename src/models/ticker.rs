@@ -1,8 +1,9 @@
 use chrono::{DateTime, Local};
+use derive_getters::Getters;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Getters, PartialEq, Serialize)]
 pub struct Ticker {
     symbol: String,
     name: String,
@@ -29,30 +30,6 @@ impl Ticker {
             last_price,
             last_price_updated_at,
         }
-    }
-
-    pub fn symbol(&self) -> &str {
-        &self.symbol
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn currency(&self) -> &str {
-        &self.currency
-    }
-
-    pub fn exchange(&self) -> &str {
-        &self.exchange
-    }
-
-    pub fn last_price(&self) -> Option<&Decimal> {
-        self.last_price.as_ref()
-    }
-
-    pub fn last_price_updated_at(&self) -> Option<&DateTime<Local>> {
-        self.last_price_updated_at.as_ref()
     }
 
     pub fn update_price(&mut self, price: Decimal) {
