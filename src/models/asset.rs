@@ -1,12 +1,12 @@
-use super::Ticker;
 use serde::{Deserialize, Serialize};
+
+use super::Ticker;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Asset {
     name: String,
     asset_type: AssetType,
-    main_ticker: Ticker,
-    other_tickers: Option<Vec<Ticker>>,
+    tickers: Vec<Ticker>,
     isin: Option<String>,
     sector: Option<String>,
     industry: Option<String>,
@@ -27,8 +27,7 @@ impl Asset {
     pub fn new(
         name: String,
         asset_type: AssetType,
-        main_ticker: Ticker,
-        other_tickers: Option<Vec<Ticker>>,
+        tickers: Vec<Ticker>,
         isin: Option<String>,
         sector: Option<String>,
         industry: Option<String>,
@@ -37,10 +36,21 @@ impl Asset {
             name,
             asset_type,
             isin,
-            main_ticker,
-            other_tickers,
+            tickers,
             sector,
             industry,
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn asset_type(&self) -> &AssetType {
+        &self.asset_type
+    }
+
+    pub fn tickers(&self) -> &Vec<Ticker> {
+        &self.tickers
     }
 }

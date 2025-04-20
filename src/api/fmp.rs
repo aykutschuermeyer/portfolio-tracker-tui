@@ -57,8 +57,6 @@ impl FmpApi {
         );
         let result = self.make_request(&endpoint).await?;
 
-        println!("{}", result);
-
         if let Some(data) = result.as_array() {
             if let Some(first_entry) = data.get(0) {
                 return Ok(Ticker::new(
@@ -66,6 +64,8 @@ impl FmpApi {
                     first_entry["name"].as_str().unwrap_or("").to_string(),
                     first_entry["currency"].as_str().unwrap_or("").to_string(),
                     first_entry["exchange"].as_str().unwrap_or("").to_string(),
+                    None,
+                    None,
                 ));
             }
         }
@@ -75,19 +75,26 @@ impl FmpApi {
         )))
     }
 
-    pub async fn get_quote(&self, ticker: &Ticker) -> Result<Quote> {
-        let endpoint = format!("quote/{}?", ticker.symbol());
+    pub async fn get_quote(&self, ticker: &Ticker) -> Result<Vec<Quote>> {
+        let endpoint = format!("quote?symbol={}", ticker.symbol());
         let result = self.make_request(&endpoint).await?;
 
+        let mut quotes = Vec::new();
+
         if let Some(data) = result.as_array() {
-            if let Some(quote_data) = data.first() {
-                // Helper to safely extract values
+            for quote_data in data {
                 let get_decimal = |field: &str| -> Result<Decimal> {
-                    quote_data[field]
-                        .as_str()
-                        .unwrap_or("0")
-                        .parse::<Decimal>()
-                        .map_err(|e| Error::msg(format!("Failed to parse {}: {}", field, e)))
+                    if let Some(num_str) = quote_data[field].as_str() {
+                        num_str.parse::<Decimal>().map_err(|e| {
+                            Error::msg(format!("Failed to parse {} as string: {}", field, e))
+                        })
+                    } else if let Some(num) = quote_data[field].as_f64() {
+                        Decimal::try_from(num).map_err(|e| {
+                            Error::msg(format!("Failed to convert {} from f64: {}", field, e))
+                        })
+                    } else {
+                        Ok(Decimal::new(0, 0))
+                    }
                 };
 
                 let quote = Quote::new(
@@ -108,13 +115,17 @@ impl FmpApi {
                     get_decimal("change")?,
                     get_decimal("changePercentage")?,
                 );
-                return Ok(quote);
+                quotes.push(quote);
             }
         }
 
-        Err(Error::msg(format!(
-            "No quote data found for ticker {}",
-            ticker.symbol()
-        )))
+        if quotes.is_empty() {
+            return Err(Error::msg(format!(
+                "No quote data found for ticker {}",
+                ticker.symbol()
+            )));
+        }
+
+        Ok(quotes)
     }
 }

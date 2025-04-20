@@ -41,4 +41,8 @@ impl Quote {
             change_percent,
         }
     }
+
+    pub fn price(&self) -> &Decimal {
+        &self.price
+    }
 }

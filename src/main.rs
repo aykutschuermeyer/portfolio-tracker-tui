@@ -4,10 +4,9 @@ use portfolio_tracker_tui::app::Portfolio;
 async fn main() {
     let mut portfolio = Portfolio::new();
 
-    let result = portfolio
+    portfolio
         .import_transactions("sample_data/transactions.csv")
-        .await
-        .unwrap_or(false);
+        .await;
 
-    println!("Success: {}", result);
+    portfolio.calculate_positions();
 }

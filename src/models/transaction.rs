@@ -45,4 +45,36 @@ impl Transaction {
             fees,
         }
     }
+
+    pub fn date(&self) -> &DateTime<Local> {
+        &self.date
+    }
+
+    pub fn transaction_type(&self) -> TransactionType {
+        self.transaction_type
+    }
+
+    pub fn asset(&self) -> &Asset {
+        &self.asset
+    }
+
+    pub fn broker(&self) -> &str {
+        &self.broker
+    }
+
+    pub fn currency(&self) -> &str {
+        &self.currency
+    }
+
+    pub fn quantity(&self) -> &Decimal {
+        &self.quantity
+    }
+
+    pub fn price(&self) -> &Decimal {
+        &self.price
+    }
+
+    pub fn fees(&self) -> &Decimal {
+        &self.fees
+    }
 }
