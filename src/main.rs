@@ -1,4 +1,4 @@
-use portfolio_tracker_tui::app::Portfolio;
+use portfolio_tracker_tui::app::{App, Portfolio};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -9,6 +9,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     portfolio.calculate_positions()?;
+
+    let mut app = App::new(portfolio);
+    app.run()?;
 
     Ok(())
 }

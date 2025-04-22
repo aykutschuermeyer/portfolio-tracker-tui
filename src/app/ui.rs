@@ -1,0 +1,97 @@
+use ratatui::{
+    Frame,
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+};
+use rust_decimal::Decimal;
+
+use crate::app::portfolio::Portfolio;
+
+pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableState) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .split(frame.area());
+
+    let title = Paragraph::new("Portfolio Tracker")
+        .style(Style::default().fg(Color::Cyan))
+        .block(Block::default().borders(Borders::ALL));
+
+    frame.render_widget(title, chunks[0]);
+
+    let positions = portfolio.positions();
+
+    if positions.is_empty() {
+        let empty_message = Paragraph::new("No positions to display. Import transactions first.")
+            .style(Style::default().fg(Color::Yellow))
+            .block(Block::default().borders(Borders::ALL));
+        frame.render_widget(empty_message, chunks[1]);
+        return;
+    }
+
+    let header_cells = [
+        "Name",
+        "Symbol",
+        "Quantity",
+        "Price",
+        "Value",
+        "Cost",
+        "Unr. G/L",
+        "Unr. G/L %",
+    ]
+    .iter()
+    .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow)));
+    let header = Row::new(header_cells).style(Style::default()).height(1);
+
+    let rows = positions.iter().map(|position| {
+        let name = position.asset().name();
+        let ticker_symbol = position.asset().tickers()[0].symbol();
+        let quantity = format!("{:.2}", position.quantity());
+        let price = format!("${:.2}", position.price());
+        let market_value = format!("${:.2}", position.market_value());
+        let cost_basis = format!("${:.2}", position.total_cost());
+
+        let unrealized_gain = *position.unrealized_gain();
+        let gain_loss_color = if unrealized_gain >= Decimal::ZERO {
+            Color::Green
+        } else {
+            Color::Red
+        };
+        let unrealized_gain_str = format!("${:.2}", unrealized_gain.abs());
+
+        let gain_loss_percent = *position.unrealized_gain_percent();
+        let gain_loss_percent_str = format!("{:.2}%", gain_loss_percent.abs());
+
+        let cells = [
+            Cell::from(name.to_string()),
+            Cell::from(ticker_symbol.to_string()),
+            Cell::from(quantity),
+            Cell::from(price),
+            Cell::from(market_value),
+            Cell::from(cost_basis),
+            Cell::from(unrealized_gain_str).style(Style::default().fg(gain_loss_color)),
+            Cell::from(gain_loss_percent_str).style(Style::default().fg(gain_loss_color)),
+        ];
+
+        Row::new(cells).height(1)
+    });
+
+    let widths = [
+        Constraint::Length(40),
+        Constraint::Length(15),
+        Constraint::Length(15),
+        Constraint::Length(15),
+        Constraint::Length(15),
+        Constraint::Length(15),
+        Constraint::Length(15),
+        Constraint::Length(15),
+    ];
+
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(Block::default().title("Positions").borders(Borders::ALL))
+        .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+
+    frame.render_stateful_widget(table, chunks[1], table_state);
+}
