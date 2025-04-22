@@ -39,6 +39,9 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
         "Cost",
         "Unr. G/L",
         "Unr. G/L %",
+        "Real. G/L",
+        "Div.",
+        "Total G/L",
     ]
     .iter()
     .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow)));
@@ -51,6 +54,9 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
         let price = format!("${:.2}", position.price());
         let market_value = format!("${:.2}", position.market_value());
         let cost_basis = format!("${:.2}", position.total_cost());
+        let realized_gain = format!("${:.2}", position.realized_gain());
+        let dividends_collected = format!("${:.2}", position.dividends_collected());
+        let total_gain = format!("${:.2}", position.total_gain());
 
         let unrealized_gain = *position.unrealized_gain();
         let gain_loss_color = if unrealized_gain >= Decimal::ZERO {
@@ -72,6 +78,9 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
             Cell::from(cost_basis),
             Cell::from(unrealized_gain_str).style(Style::default().fg(gain_loss_color)),
             Cell::from(gain_loss_percent_str).style(Style::default().fg(gain_loss_color)),
+            Cell::from(realized_gain).style(Style::default().fg(gain_loss_color)),
+            Cell::from(dividends_collected).style(Style::default().fg(gain_loss_color)),
+            Cell::from(total_gain).style(Style::default().fg(gain_loss_color)),
         ];
 
         Row::new(cells).height(1)
@@ -79,6 +88,9 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
 
     let widths = [
         Constraint::Length(40),
+        Constraint::Length(15),
+        Constraint::Length(15),
+        Constraint::Length(15),
         Constraint::Length(15),
         Constraint::Length(15),
         Constraint::Length(15),

@@ -15,6 +15,10 @@ pub struct Transaction {
     quantity: Decimal,
     price: Decimal,
     fees: Decimal,
+    cumulative_units: Decimal,
+    cumulative_cost: Decimal,
+    realized_gains: Decimal,
+    dividends_collected: Decimal,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -34,6 +38,10 @@ impl Transaction {
         quantity: Decimal,
         price: Decimal,
         fees: Decimal,
+        cumulative_units: Decimal,
+        cumulative_cost: Decimal,
+        realized_gains: Decimal,
+        dividends_collected: Decimal,
     ) -> Self {
         Self {
             date,
@@ -44,6 +52,10 @@ impl Transaction {
             quantity,
             price,
             fees,
+            cumulative_units,
+            cumulative_cost,
+            realized_gains,
+            dividends_collected,
         }
     }
 }

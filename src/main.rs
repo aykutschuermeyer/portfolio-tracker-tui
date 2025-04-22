@@ -8,8 +8,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .import_transactions("sample_data/transactions.csv")
         .await?;
 
-    portfolio.calculate_positions()?;
-
     let mut app = App::new(portfolio);
     app.run()?;
 

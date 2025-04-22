@@ -15,6 +15,7 @@ pub struct Position {
     unrealized_gain: Decimal,
     unrealized_gain_percent: Decimal,
     realized_gain: Decimal,
+    dividends_collected: Decimal,
     total_gain: Decimal,
 }
 
@@ -29,6 +30,7 @@ impl Position {
         unrealized_gain: Decimal,
         unrealized_gain_percent: Decimal,
         realized_gain: Decimal,
+        dividends_collected: Decimal,
         total_gain: Decimal,
     ) -> Self {
         Self {
@@ -41,6 +43,7 @@ impl Position {
             unrealized_gain,
             unrealized_gain_percent,
             realized_gain,
+            dividends_collected,
             total_gain,
         }
     }
