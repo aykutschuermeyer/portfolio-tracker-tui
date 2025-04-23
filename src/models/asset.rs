@@ -1,9 +1,8 @@
-use derive_getters::Getters;
-use serde::{Deserialize, Serialize};
-
 use super::Ticker;
+use derive_getters::Getters;
+use derive_new::new;
 
-#[derive(Clone, Debug, Deserialize, Eq, Getters, PartialEq, Serialize)]
+#[derive(Clone, Debug, Getters, new)]
 pub struct Asset {
     name: String,
     asset_type: AssetType,
@@ -13,7 +12,7 @@ pub struct Asset {
     industry: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug)]
 pub enum AssetType {
     Stock,
     Bond,
@@ -22,24 +21,4 @@ pub enum AssetType {
     Crypto,
     PreciousMetals,
     Other,
-}
-
-impl Asset {
-    pub fn new(
-        name: String,
-        asset_type: AssetType,
-        tickers: Vec<Ticker>,
-        isin: Option<String>,
-        sector: Option<String>,
-        industry: Option<String>,
-    ) -> Self {
-        Self {
-            name,
-            asset_type,
-            isin,
-            tickers,
-            sector,
-            industry,
-        }
-    }
 }

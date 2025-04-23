@@ -1,8 +1,8 @@
 use derive_getters::Getters;
+use derive_new::new;
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Eq, Getters, PartialEq, Serialize)]
+#[derive(Clone, Debug, Getters, new)]
 pub struct Quote {
     symbol: String,
     open: Decimal,
@@ -14,32 +14,4 @@ pub struct Quote {
     previous_close: Decimal,
     change: Decimal,
     change_percent: Decimal,
-}
-
-impl Quote {
-    pub fn new(
-        symbol: String,
-        open: Decimal,
-        high: Decimal,
-        low: Decimal,
-        price: Decimal,
-        volume: i64,
-        date: String,
-        previous_close: Decimal,
-        change: Decimal,
-        change_percent: Decimal,
-    ) -> Self {
-        Self {
-            symbol,
-            open,
-            high,
-            low,
-            price,
-            volume,
-            date,
-            previous_close,
-            change,
-            change_percent,
-        }
-    }
 }
