@@ -4,9 +4,6 @@ pub use asset::{Asset, AssetType};
 pub mod position;
 pub use position::Position;
 
-pub mod quote;
-pub use quote::Quote;
-
 pub mod ticker;
 pub use ticker::Ticker;
 
