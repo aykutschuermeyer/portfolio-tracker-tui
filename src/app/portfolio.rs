@@ -1,18 +1,21 @@
-use crate::{
-    api::FmpApi,
-    models::{Asset, AssetType, Position, Transaction, TransactionType},
-};
 use anyhow::{Context, Error, Result};
 use chrono::{Local, TimeZone};
 use csv::Reader;
+use reqwest::Client;
 use rust_decimal::Decimal;
 use std::collections::HashMap;
+
+use crate::{
+    api::fmp,
+    models::{Asset, AssetType, Position, Transaction, TransactionType},
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct Portfolio {
     transactions: Vec<Transaction>,
     positions: Vec<Position>,
-    api: FmpApi,
+    client: Client,
+    api_key: String,
 }
 
 impl Portfolio {
@@ -20,7 +23,8 @@ impl Portfolio {
         Self {
             positions: Vec::new(),
             transactions: Vec::new(),
-            api: FmpApi::new(),
+            client: Client::new(),
+            api_key: std::env::var("FMP_API_KEY").unwrap_or_else(|_| "".to_string()),
         }
     }
 
@@ -92,12 +96,19 @@ impl Portfolio {
 
             let broker = rec[6].to_string();
 
-            let mut symbol_split = symbol.split(".");
+            let mut symbol_split = symbol.split('.');
             let standalone_symbol = symbol_split.next().unwrap_or("");
             let exchange = symbol_split.next().unwrap_or("");
 
-            let mut ticker = match self.api.search(standalone_symbol, exchange).await {
-                Ok(ticker) => ticker,
+            let search_results = match fmp::search_symbol(
+                standalone_symbol,
+                exchange,
+                &self.client,
+                &self.api_key,
+            )
+            .await
+            {
+                Ok(results) => results,
                 Err(err) => {
                     eprintln!(
                         "Warning: Failed to find ticker for symbol '{}' on exchange '{}' at row {}: {}",
@@ -110,9 +121,18 @@ impl Portfolio {
                 }
             };
 
-            let currency = ticker.currency().to_string();
+            let fmp_symbol = &search_results[0];
+            let currency = fmp_symbol.currency().to_string();
+            let mut ticker = crate::models::Ticker::new(
+                fmp_symbol.symbol().to_string(),
+                fmp_symbol.name().to_string(),
+                currency.clone(),
+                fmp_symbol.exchange().to_string(),
+                None,
+                None,
+            );
 
-            let quotes = match self.api.get_quote(&ticker).await {
+            let quotes = match fmp::get_quote(&ticker.symbol(), &self.client, &self.api_key).await {
                 Ok(quotes) => quotes,
                 Err(err) => {
                     eprintln!(
@@ -134,7 +154,8 @@ impl Portfolio {
                 continue;
             }
 
-            ticker.update_price(*quotes[0].price());
+            let price_decimal = *quotes[0].price();
+            ticker.update_price(price_decimal);
 
             let asset = Asset::new(
                 ticker.name().to_string(),

@@ -1,6 +1,7 @@
-use super::Ticker;
 use derive_getters::Getters;
 use derive_new::new;
+
+use super::Ticker;
 
 #[derive(Clone, Debug, Getters, new)]
 pub struct Asset {

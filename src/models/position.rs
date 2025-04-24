@@ -1,7 +1,8 @@
-use super::Asset;
 use derive_getters::Getters;
 use derive_new::new;
 use rust_decimal::Decimal;
+
+use super::Asset;
 
 #[derive(Clone, Debug, Getters, new)]
 pub struct Position {
