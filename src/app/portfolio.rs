@@ -1,14 +1,17 @@
+use std::collections::HashMap;
+
 use anyhow::{Context, Error, Result};
-use chrono::{Local, TimeZone};
+use chrono::Local;
 use csv::Reader;
 use reqwest::Client;
 use rust_decimal::Decimal;
-use std::collections::HashMap;
 
 use crate::{
-    api::fmp,
-    models::{Asset, AssetType, Position, Transaction, TransactionType},
+    api::fmp::{get_quote, search_symbol},
+    models::{Position, Ticker, Transaction},
 };
+
+use super::utils::parse_transaction;
 
 #[derive(Clone, Debug, Default)]
 pub struct Portfolio {
@@ -47,186 +50,112 @@ impl Portfolio {
             let rec = record
                 .with_context(|| format!("Failed to read CSV record at row {}", row_idx + 1))?;
 
-            if rec.len() < 7 {
-                return Err(Error::msg(format!(
-                    "Invalid CSV format at row {}: expected at least 7 columns, found {}",
-                    row_idx + 1,
-                    rec.len()
-                )));
-            }
-
-            let date_str = format!("{} 00:00:00", &rec[0]);
-            let naive = chrono::NaiveDateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S")
-                .with_context(|| {
-                    format!("Failed to parse date '{}' at row {}", &rec[0], row_idx + 1)
-                })?;
-            let date = Local.from_utc_datetime(&naive);
-
-            let transaction_type = match &rec[1] {
-                "Buy" => TransactionType::Buy,
-                "Sell" => TransactionType::Sell,
-                "Div" => TransactionType::Div,
-                other => {
-                    eprintln!(
-                        "Warning: Skipping unknown transaction type '{}' at row {}",
-                        other,
-                        row_idx + 1
-                    );
+            let transaction_result = match parse_transaction(&rec, row_idx) {
+                Ok(result) => result,
+                Err(err) => {
+                    eprintln!("Warning: {}", err);
                     continue;
                 }
             };
 
-            let symbol = rec[2].to_string();
+            let (date, transaction_type, symbol, quantity, price, fees, broker) =
+                transaction_result;
 
-            let quantity = rec[3].parse::<Decimal>().with_context(|| {
-                format!(
-                    "Failed to parse quantity '{}' at row {}",
-                    &rec[3],
-                    row_idx + 1
-                )
-            })?;
+            let (standalone_symbol, exchange) = {
+                let symbol: &str = &symbol;
+                let mut symbol_split = symbol.split('.');
+                let standalone_symbol = symbol_split.next().unwrap_or("").to_string();
+                let exchange = symbol_split.next().unwrap_or("").to_string();
 
-            let price = rec[4].parse::<Decimal>().with_context(|| {
-                format!("Failed to parse price '{}' at row {}", &rec[4], row_idx + 1)
-            })?;
+                (standalone_symbol, exchange)
+            };
 
-            let fees = rec[5].parse::<Decimal>().with_context(|| {
-                format!("Failed to parse fees '{}' at row {}", &rec[5], row_idx + 1)
-            })?;
-
-            let broker = rec[6].to_string();
-
-            let mut symbol_split = symbol.split('.');
-            let standalone_symbol = symbol_split.next().unwrap_or("");
-            let exchange = symbol_split.next().unwrap_or("");
-
-            let search_results = match fmp::search_symbol(
-                standalone_symbol,
-                exchange,
-                &self.client,
-                &self.api_key,
-            )
+            let ticker_result = match {
+                let symbol: &str = &standalone_symbol;
+                let exchange: &str = &exchange;
+                let client: &Client = &self.client;
+                let api_key: &str = &self.api_key;
+                let row_idx = row_idx;
+                async move {
+                    let search_results = match search_symbol(symbol, exchange, client, api_key).await {
+                        Ok(results) => {
+                            if results.is_empty() {
+                                return Err(Error::msg(format!(
+                                    "No results found for symbol '{}' on exchange '{}' at row {}",
+                                    symbol,
+                                    exchange,
+                                    row_idx + 1
+                                )));
+                            }
+                            results
+                        }
+                        Err(err) => {
+                            return Err(Error::msg(format!(
+                                "Failed to find ticker for symbol '{}' on exchange '{}' at row {}: {}",
+                                symbol,
+                                exchange,
+                                row_idx + 1,
+                                err
+                            )));
+                        }
+                    };
+                    let currency = search_results[0].currency().to_string();
+                    let ticker = search_results[0].to_ticker();
+                    let quotes = match get_quote(ticker.symbol(), client, api_key).await {
+                        Ok(quotes) => {
+                            if quotes.is_empty() {
+                                return Err(Error::msg(format!(
+                                    "No quotes found for ticker '{}' at row {}",
+                                    ticker.symbol(),
+                                    row_idx + 1
+                                )));
+                            }
+                            quotes
+                        }
+                        Err(err) => {
+                            return Err(Error::msg(format!(
+                                "Failed to get quote for ticker '{}' at row {}: {}",
+                                ticker.symbol(),
+                                row_idx + 1,
+                                err
+                            )));
+                        }
+                    };
+                    let price_decimal = *quotes[0].price();
+                    let ticker_with_price = Ticker::new(
+                        ticker.symbol().to_string(),
+                        ticker.name().to_string(),
+                        ticker.currency().to_string(),
+                        ticker.exchange().to_string(),
+                        Some(price_decimal),
+                        Some(Local::now()),
+                    );
+                    Ok((ticker_with_price, currency))
+                }
+            }
             .await
             {
-                Ok(results) => results,
+                Ok(result) => result,
                 Err(err) => {
-                    eprintln!(
-                        "Warning: Failed to find ticker for symbol '{}' on exchange '{}' at row {}: {}",
-                        standalone_symbol,
-                        exchange,
-                        row_idx + 1,
-                        err
-                    );
+                    eprintln!("Warning: {}", err);
                     continue;
                 }
             };
 
-            let fmp_symbol = &search_results[0];
-            let currency = fmp_symbol.currency().to_string();
-            let mut ticker = crate::models::Ticker::new(
-                fmp_symbol.symbol().to_string(),
-                fmp_symbol.name().to_string(),
-                currency.clone(),
-                fmp_symbol.exchange().to_string(),
-                None,
-                None,
-            );
+            let (ticker, currency) = ticker_result;
 
-            let quotes = match fmp::get_quote(&ticker.symbol(), &self.client, &self.api_key).await {
-                Ok(quotes) => quotes,
-                Err(err) => {
-                    eprintln!(
-                        "Warning: Failed to get quote for ticker '{}' at row {}: {}",
-                        ticker.symbol(),
-                        row_idx + 1,
-                        err
-                    );
-                    continue;
-                }
-            };
-
-            if quotes.is_empty() {
-                eprintln!(
-                    "Warning: No quotes found for ticker '{}' at row {}",
-                    ticker.symbol(),
-                    row_idx + 1
-                );
-                continue;
-            }
-
-            let price_decimal = *quotes[0].price();
-            ticker.update_price(price_decimal);
-
-            let asset = Asset::new(
-                ticker.name().to_string(),
-                AssetType::Stock,
-                Vec::from([ticker]),
-                None,
-                None,
-                None,
-            );
-
+            let asset = crate::app::utils::create_asset(ticker);
             let ticker_symbol = asset.tickers()[0].symbol().to_string();
 
-            let (
-                mut cumulative_units,
-                mut cumulative_cost,
-                mut realized_gains,
-                mut dividends_collected,
-            ) = position_state.get(&ticker_symbol).cloned().unwrap_or((
-                Decimal::ZERO,
-                Decimal::ZERO,
-                Decimal::ZERO,
-                Decimal::ZERO,
-            ));
-
-            match transaction_type {
-                TransactionType::Buy => {
-                    cumulative_units += quantity;
-                    cumulative_cost += (price * quantity) + fees;
-                }
-                TransactionType::Sell => {
-                    if cumulative_units > Decimal::ZERO {
-                        let avg_cost_per_share = if cumulative_units > Decimal::ZERO {
-                            cumulative_cost / cumulative_units
-                        } else {
-                            Decimal::ZERO
-                        };
-
-                        let sell_quantity = quantity.min(cumulative_units);
-                        let cost_basis = avg_cost_per_share * sell_quantity;
-                        let proceeds = price * sell_quantity - fees;
-                        let gain_loss = proceeds - cost_basis;
-
-                        realized_gains += gain_loss;
-                        cumulative_units -= sell_quantity;
-
-                        if cumulative_units > Decimal::ZERO {
-                            cumulative_cost = avg_cost_per_share * cumulative_units;
-                        } else {
-                            cumulative_cost = Decimal::ZERO;
-                        }
-                    } else {
-                        eprintln!(
-                            "Warning: Attempting to sell more shares than owned for {}: sell quantity {}, owned quantity {}",
-                            ticker_symbol, quantity, cumulative_units
-                        );
-                    }
-                }
-                TransactionType::Div => {
-                    dividends_collected += price * quantity;
-                }
-            }
-
-            position_state.insert(
-                ticker_symbol,
-                (
-                    cumulative_units,
-                    cumulative_cost,
-                    realized_gains,
-                    dividends_collected,
-                ),
-            );
+            let (cumulative_units, cumulative_cost, realized_gains, dividends_collected) =
+                crate::app::utils::update_position_state(
+                    &mut position_state,
+                    &ticker_symbol,
+                    &transaction_type,
+                    quantity,
+                    price,
+                    fees,
+                );
 
             let transaction = Transaction::new(
                 date,
