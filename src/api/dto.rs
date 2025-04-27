@@ -18,13 +18,22 @@ pub struct FmpQuoteDto {
     day_high: Decimal,
     year_high: Decimal,
     year_low: Decimal,
-    market_cap: i64,
+    market_cap: Option<i64>,
     price_avg_50: Decimal,
     price_avg_200: Decimal,
     exchange: String,
     open: Decimal,
     previous_close: Decimal,
     timestamp: i64,
+}
+
+#[derive(Debug, Deserialize, Getters, new)]
+#[serde(rename_all = "camelCase")]
+pub struct FmpQuoteHistoryDto {
+    symbol: String,
+    date: String,
+    price: Decimal,
+    volume: i64,
 }
 
 #[derive(Debug, Deserialize, Getters, new)]
