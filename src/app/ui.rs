@@ -20,10 +20,10 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
 
     frame.render_widget(title, chunks[0]);
 
-    let positions = portfolio.positions();
+    let holdings = portfolio.holdings();
 
-    if positions.is_empty() {
-        let empty_message = Paragraph::new("No positions to display. Import transactions first.")
+    if holdings.is_empty() {
+        let empty_message = Paragraph::new("No holdings to display. Import transactions first.")
             .style(Style::default().fg(Color::Yellow))
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(empty_message, chunks[1]);
@@ -32,7 +32,7 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
 
     let header_cells = [
         "Name",
-        "Symbol",
+        // "Symbol",
         "Quantity",
         "Price",
         "Value",
@@ -47,9 +47,9 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
     .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow)));
     let header = Row::new(header_cells).style(Style::default()).height(1);
 
-    let rows = positions.iter().map(|position| {
+    let rows = holdings.iter().map(|position| {
         let name = position.asset().name();
-        let ticker_symbol = position.asset().tickers()[0].symbol();
+        // let ticker_symbol = position.asset().tickers()[0].symbol();
         let quantity = format!("{:.2}", position.quantity());
         let price = format!("${:.2}", position.price());
         let market_value = format!("${:.2}", position.market_value());
@@ -71,7 +71,7 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
 
         let cells = [
             Cell::from(name.to_string()),
-            Cell::from(ticker_symbol.to_string()),
+            // Cell::from(ticker_symbol.to_string()),
             Cell::from(quantity),
             Cell::from(price),
             Cell::from(market_value),
@@ -88,7 +88,7 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
 
     let widths = [
         Constraint::Length(40),
-        Constraint::Length(15),
+        // Constraint::Length(15),
         Constraint::Length(15),
         Constraint::Length(15),
         Constraint::Length(15),

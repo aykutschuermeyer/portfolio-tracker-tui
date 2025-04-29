@@ -1,3 +1,5 @@
+use std::io;
+
 use anyhow::Result;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
@@ -9,7 +11,6 @@ use ratatui::{
     backend::{Backend, CrosstermBackend},
     widgets::TableState,
 };
-use std::io;
 
 use crate::app::{Portfolio, ui};
 
@@ -21,7 +22,7 @@ pub struct App {
 impl App {
     pub fn new(portfolio: Portfolio) -> Self {
         let mut table_state = TableState::default();
-        if !portfolio.positions().is_empty() {
+        if !portfolio.holdings().is_empty() {
             table_state.select(Some(0));
         }
 
@@ -59,11 +60,11 @@ impl App {
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
                     KeyCode::Down => {
-                        let positions = self.portfolio.positions();
-                        if !positions.is_empty() {
+                        let holdings = self.portfolio.holdings();
+                        if !holdings.is_empty() {
                             let i = match self.table_state.selected() {
                                 Some(i) => {
-                                    if i >= positions.len() - 1 {
+                                    if i >= holdings.len() - 1 {
                                         0
                                     } else {
                                         i + 1
@@ -75,12 +76,12 @@ impl App {
                         }
                     }
                     KeyCode::Up => {
-                        let positions = self.portfolio.positions();
-                        if !positions.is_empty() {
+                        let holdings = self.portfolio.holdings();
+                        if !holdings.is_empty() {
                             let i = match self.table_state.selected() {
                                 Some(i) => {
                                     if i == 0 {
-                                        positions.len() - 1
+                                        holdings.len() - 1
                                     } else {
                                         i - 1
                                     }
