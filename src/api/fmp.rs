@@ -42,7 +42,7 @@ pub async fn get_quote_history(
     api_key: &str,
 ) -> Result<Vec<FmpQuoteHistoryDto>> {
     let endpoint = format!(
-        "quote?symbol={}&from={}&to={}",
+        "historical-price-eod/light?symbol={}&from={}&to={}",
         ticker_symbol, start_date, end_date
     );
     let res = make_request(client, BASE_URL, &endpoint, api_key).await?;

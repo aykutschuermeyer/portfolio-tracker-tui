@@ -12,6 +12,7 @@ pub struct Transaction {
     asset: Asset,
     broker: String,
     currency: String,
+    exchange_rate: Decimal,
     quantity: Decimal,
     price: Decimal,
     fees: Decimal,
@@ -28,8 +29,8 @@ pub enum TransactionType {
 }
 
 impl Transaction {
-    pub fn get_amount_change(&self) -> Decimal {
-        let amount = &self.price * &self.quantity + &self.fees;
+    pub fn get_amount(&self) -> Decimal {
+        let amount = &self.price * &self.exchange_rate * &self.quantity + &self.fees;
         if self.transaction_type == TransactionType::Buy {
             return -amount.clone();
         } else {
@@ -37,7 +38,7 @@ impl Transaction {
         }
     }
 
-    pub fn get_quantity_change(&self) -> Decimal {
+    pub fn get_quantity(&self) -> Decimal {
         if self.transaction_type == TransactionType::Buy {
             return self.quantity.clone();
         } else {

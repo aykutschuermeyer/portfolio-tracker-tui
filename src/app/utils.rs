@@ -1,8 +1,13 @@
 use anyhow::{Context, Error, Result};
 use chrono::{DateTime, Local, TimeZone};
+use reqwest::Client;
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 
-use crate::models::{Asset, AssetType, Ticker, TransactionType};
+use crate::{
+    api::fmp::get_quote_history,
+    models::{Asset, AssetType, Ticker, TransactionType},
+};
 
 pub fn parse_datetime(field: &str, row_idx: usize) -> Result<DateTime<Local>> {
     let date_str = format!("{} 00:00:00", field);
@@ -45,4 +50,31 @@ pub fn create_asset(ticker: Ticker) -> Asset {
         None,
         None,
     )
+}
+
+pub async fn get_exchange_rate(
+    base_currency: &String,
+    transaction_currency: &String,
+    transaction_date: &DateTime<Local>,
+    client: &Client,
+    api_key: &String,
+) -> Result<Decimal> {
+    if base_currency == transaction_currency {
+        return Ok(dec!(1.0));
+    }
+
+    let quote_result = get_quote_history(
+        &format!("{}{}", *base_currency, *transaction_currency),
+        &transaction_date.format("%Y-%m-%d").to_string(),
+        &transaction_date.format("%Y-%m-%d").to_string(),
+        client,
+        api_key,
+    )
+    .await?;
+
+    if let Some(first_quote) = quote_result.first() {
+        return Ok(dec!(1) / *first_quote.price());
+    } else {
+        return Err(anyhow::anyhow!("No quote data available"));
+    }
 }

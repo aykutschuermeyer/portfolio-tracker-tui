@@ -11,11 +11,12 @@ use crate::{
 
 use super::{
     calc::fifo,
-    utils::{parse_datetime, parse_decimal, parse_transaction_type},
+    utils::{get_exchange_rate, parse_datetime, parse_decimal, parse_transaction_type},
 };
 
 #[derive(Clone, Debug, Default, Getters)]
 pub struct Portfolio {
+    base_currency: String,
     transactions: Vec<Transaction>,
     holdings: Vec<Holding>,
     client: Client,
@@ -25,6 +26,7 @@ pub struct Portfolio {
 impl Portfolio {
     pub fn new() -> Self {
         Self {
+            base_currency: String::from("EUR"),
             holdings: Vec::new(),
             transactions: Vec::new(),
             client: Client::new(),
@@ -58,6 +60,15 @@ impl Portfolio {
             let ticker = search_symbol_result[0].to_ticker();
             let currency = ticker.currency().clone();
 
+            let exchange_rate = get_exchange_rate(
+                &self.base_currency,
+                &currency,
+                &date,
+                &self.client,
+                &self.api_key,
+            )
+            .await?;
+
             let asset = crate::app::utils::create_asset(ticker);
 
             let mut new_transaction = Transaction::new(
@@ -66,6 +77,7 @@ impl Portfolio {
                 asset.clone(),
                 broker.clone(),
                 currency,
+                exchange_rate,
                 quantity,
                 price,
                 fees,
@@ -78,11 +90,11 @@ impl Portfolio {
                 .transactions
                 .iter()
                 .filter(|t| t.asset().name() == asset.name() && t.broker() == &broker)
-                .map(|t| (t.get_amount_change(), t.get_quantity_change()))
+                .map(|t| (t.get_amount(), t.get_quantity()))
                 .unzip();
 
-            amounts.push(new_transaction.get_amount_change());
-            quantities.push(new_transaction.get_quantity_change());
+            amounts.push(new_transaction.get_amount());
+            quantities.push(new_transaction.get_quantity());
 
             let position_state = fifo(amounts, quantities)?;
 
