@@ -3,7 +3,7 @@ use derive_getters::Getters;
 use derive_new::new;
 use rust_decimal::Decimal;
 
-use super::{Asset, PositionState};
+use super::{Asset, PositionState, TransactionGains};
 
 #[derive(Clone, Debug, Getters, new)]
 pub struct Transaction {
@@ -17,8 +17,7 @@ pub struct Transaction {
     price: Decimal,
     fees: Decimal,
     position_state: Option<PositionState>,
-    realized_gains: Option<Decimal>,
-    dividends_collected: Option<Decimal>,
+    transaction_gains: Option<TransactionGains>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,14 +45,11 @@ impl Transaction {
         }
     }
 
-    pub fn set_state_and_gains(
-        &mut self,
-        position_state: Option<PositionState>,
-        realized_gains: Option<Decimal>,
-        dividends_collected: Option<Decimal>,
-    ) {
+    pub fn set_position_state(&mut self, position_state: Option<PositionState>) {
         self.position_state = position_state;
-        self.realized_gains = realized_gains;
-        self.dividends_collected = dividends_collected;
+    }
+
+    pub fn set_transaction_gains(&mut self, transaction_gains: Option<TransactionGains>) {
+        self.transaction_gains = transaction_gains;
     }
 }

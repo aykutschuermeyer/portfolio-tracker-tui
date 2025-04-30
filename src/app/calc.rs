@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use anyhow::Result;
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
-use crate::models::PositionState;
+use crate::models::{PositionState, Transaction, TransactionGains, TransactionType};
 
 pub fn fifo(amounts: Vec<Decimal>, quantities: Vec<Decimal>) -> Result<PositionState> {
     let mut queue = VecDeque::new();
@@ -53,4 +53,22 @@ pub fn fifo(amounts: Vec<Decimal>, quantities: Vec<Decimal>) -> Result<PositionS
         cost_of_remaining.abs(),
         cost_of_goods_sold.abs(),
     ))
+}
+
+pub fn calculate_gains(
+    transaction: &Transaction,
+    position_state: &PositionState,
+) -> TransactionGains {
+    let mut realized_gains = Decimal::ZERO;
+    let mut dividends_collected = Decimal::ZERO;
+
+    if transaction.transaction_type() == &TransactionType::Sell {
+        realized_gains = transaction.get_amount().abs() - position_state.cost_of_units_sold();
+    }
+
+    if transaction.transaction_type() == &TransactionType::Div {
+        dividends_collected = transaction.get_amount();
+    }
+
+    TransactionGains::new(realized_gains, dividends_collected)
 }

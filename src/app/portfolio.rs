@@ -6,12 +6,14 @@ use rust_decimal::Decimal;
 
 use crate::{
     api::fmp::search_symbol,
-    models::{Holding, Transaction, TransactionType},
+    models::{Holding, Transaction},
 };
 
 use super::{
-    calc::fifo,
-    utils::{get_exchange_rate, parse_datetime, parse_decimal, parse_transaction_type},
+    calc::{calculate_gains, fifo},
+    utils::{
+        create_asset, get_exchange_rate, parse_datetime, parse_decimal, parse_transaction_type,
+    },
 };
 
 #[derive(Clone, Debug, Default, Getters)]
@@ -69,9 +71,9 @@ impl Portfolio {
             )
             .await?;
 
-            let asset = crate::app::utils::create_asset(ticker);
+            let asset = create_asset(ticker);
 
-            let mut new_transaction = Transaction::new(
+            let mut transaction = Transaction::new(
                 date,
                 transaction_type.clone(),
                 asset.clone(),
@@ -83,7 +85,6 @@ impl Portfolio {
                 fees,
                 None,
                 None,
-                None,
             );
 
             let (mut amounts, mut quantities): (Vec<Decimal>, Vec<Decimal>) = self
@@ -93,33 +94,16 @@ impl Portfolio {
                 .map(|t| (t.get_amount(), t.get_quantity()))
                 .unzip();
 
-            amounts.push(new_transaction.get_amount());
-            quantities.push(new_transaction.get_quantity());
+            amounts.push(transaction.get_amount());
+            quantities.push(transaction.get_quantity());
 
             let position_state = fifo(amounts, quantities)?;
+            let transaction_gains = calculate_gains(&transaction, &position_state);
 
-            // println!(
-            //     "{} {} {} {}",
-            //     asset.name(),
-            //     position_state.cumulative_units(),
-            //     position_state.cumulative_cost(),
-            //     position_state.cost_of_units_sold()
-            // );
+            transaction.set_position_state(Some(position_state));
+            transaction.set_transaction_gains(Some(transaction_gains));
 
-            let realized_gains = position_state.cost_of_units_sold().clone();
-            let dividends_collected = if transaction_type.clone() == TransactionType::Div {
-                &price * &quantity + &fees
-            } else {
-                Decimal::ZERO
-            };
-
-            new_transaction.set_state_and_gains(
-                Some(position_state),
-                Some(realized_gains),
-                Some(dividends_collected),
-            );
-
-            self.transactions.push(new_transaction);
+            self.transactions.push(transaction);
         }
 
         Ok(())
