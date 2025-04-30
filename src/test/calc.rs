@@ -3,7 +3,7 @@ mod tests {
     use rust_decimal::Decimal;
     use rust_decimal_macros::dec;
 
-    use crate::app::calc::fifo;
+    use crate::app::calc::calculate_position_state;
 
     fn set_sample_data() -> (Vec<Decimal>, Vec<Decimal>) {
         let amounts: Vec<Decimal> = vec![
@@ -29,7 +29,7 @@ mod tests {
     #[test]
     fn it_works() {
         let (amounts, quantities) = set_sample_data();
-        let result = fifo(amounts, quantities).unwrap();
+        let result = calculate_position_state(amounts, quantities).unwrap();
 
         println!("Cumulative Units: {}", result.cumulative_units());
         println!("Cumulative Cost: {}", result.cumulative_cost());

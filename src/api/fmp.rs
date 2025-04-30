@@ -2,7 +2,7 @@ use anyhow::Result;
 use reqwest::Client;
 
 use super::{
-    dto::{FmpQuoteDto, FmpQuoteHistoryDto, FmpSearchSymbolDto},
+    fmp_dto::{FmpQuoteDto, FmpQuoteHistoryDto, FmpSearchSymbolDto},
     utils::{make_request, parse_response_array},
 };
 

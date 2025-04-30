@@ -6,14 +6,12 @@ use rust_decimal::Decimal;
 
 use crate::{
     api::fmp::search_symbol,
-    models::{Holding, Transaction},
+    models::{Asset, AssetType, Holding, Transaction},
 };
 
 use super::{
-    calc::{calculate_gains, fifo},
-    utils::{
-        create_asset, get_exchange_rate, parse_datetime, parse_decimal, parse_transaction_type,
-    },
+    calc::{calculate_position_state, calculate_transaction_gains},
+    utils::{get_exchange_rate, parse_datetime, parse_decimal, parse_transaction_type},
 };
 
 #[derive(Clone, Debug, Default, Getters)]
@@ -43,12 +41,12 @@ impl Portfolio {
         for (i, record) in reader.records().enumerate() {
             let rec = record.with_context(|| format!("Failed to read CSV record {}", i + 1))?;
 
-            let date = parse_datetime(&rec[0], i)?;
-            let transaction_type = parse_transaction_type(&rec[1], i)?;
+            let date = parse_datetime(&rec[0])?;
+            let transaction_type = parse_transaction_type(&rec[1])?;
             let symbol = rec[2].to_string();
-            let quantity = parse_decimal(&rec[3], "quantity", i)?;
-            let price = parse_decimal(&rec[4], "price", i)?;
-            let fees = parse_decimal(&rec[5], "fees", i)?;
+            let quantity = parse_decimal(&rec[3], "quantity")?;
+            let price = parse_decimal(&rec[4], "price")?;
+            let fees = parse_decimal(&rec[5], "fees")?;
             let broker = rec[6].to_string();
 
             let symbol: &str = &symbol;
@@ -56,11 +54,11 @@ impl Portfolio {
             let standalone_symbol = symbol_split.next().unwrap_or("").to_string();
             let exchange = symbol_split.next().unwrap_or("").to_string();
 
-            let search_symbol_result =
+            let search_result =
                 search_symbol(&standalone_symbol, &exchange, &self.client, &self.api_key).await?;
 
-            let ticker = search_symbol_result[0].to_ticker();
-            let currency = ticker.currency().clone();
+            let ticker = search_result[0].to_ticker();
+            let currency = ticker.currency();
 
             let exchange_rate = get_exchange_rate(
                 &self.base_currency,
@@ -71,14 +69,21 @@ impl Portfolio {
             )
             .await?;
 
-            let asset = create_asset(ticker);
+            let asset = Asset::new(
+                ticker.name().to_string(),
+                AssetType::Stock,
+                vec![ticker.clone()],
+                None,
+                None,
+                None,
+            );
 
             let mut transaction = Transaction::new(
                 date,
                 transaction_type.clone(),
                 asset.clone(),
                 broker.clone(),
-                currency,
+                currency.clone(),
                 exchange_rate,
                 quantity,
                 price,
@@ -97,8 +102,8 @@ impl Portfolio {
             amounts.push(transaction.get_amount());
             quantities.push(transaction.get_quantity());
 
-            let position_state = fifo(amounts, quantities)?;
-            let transaction_gains = calculate_gains(&transaction, &position_state);
+            let position_state = calculate_position_state(amounts, quantities)?;
+            let transaction_gains = calculate_transaction_gains(&transaction, &position_state);
 
             transaction.set_position_state(Some(position_state));
             transaction.set_transaction_gains(Some(transaction_gains));
