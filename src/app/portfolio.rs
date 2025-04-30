@@ -3,9 +3,11 @@ use csv::Reader;
 use derive_getters::Getters;
 use reqwest::Client;
 use rust_decimal::Decimal;
+use sqlx::{Pool, Sqlite};
 
 use crate::{
     api::fmp::search_symbol,
+    db::init::{create_assets, create_tickers, create_transactions},
     models::{Asset, AssetType, Holding, Transaction},
 };
 
@@ -14,9 +16,10 @@ use super::{
     utils::{get_exchange_rate, parse_datetime, parse_decimal, parse_transaction_type},
 };
 
-#[derive(Clone, Debug, Default, Getters)]
+#[derive(Clone, Debug, Getters)]
 pub struct Portfolio {
     base_currency: String,
+    connection: Pool<Sqlite>,
     transactions: Vec<Transaction>,
     holdings: Vec<Holding>,
     client: Client,
@@ -24,14 +27,21 @@ pub struct Portfolio {
 }
 
 impl Portfolio {
-    pub fn new() -> Self {
+    pub fn new(base_currency: String, connection: Pool<Sqlite>, api_key: String) -> Self {
         Self {
-            base_currency: String::from("EUR"),
+            base_currency,
+            connection,
             holdings: Vec::new(),
             transactions: Vec::new(),
             client: Client::new(),
-            api_key: std::env::var("FMP_API_KEY").unwrap_or_else(|_| "".to_string()),
+            api_key,
         }
+    }
+
+    pub async fn initialize_database_tables(&self) {
+        let _ = create_tickers(&self.connection).await;
+        let _ = create_assets(&self.connection).await;
+        let _ = create_transactions(&self.connection).await;
     }
 
     pub async fn import_transactions(&mut self, path: &str) -> Result<()> {
