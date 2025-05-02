@@ -1,20 +1,25 @@
-use std::env;
+use std::{env, path::Path};
 
 use portfolio_tracker_tui::app::{App, Portfolio};
-use sqlx::sqlite;
+use sqlx::{
+    migrate::Migrator,
+    sqlite::{SqliteConnectOptions, SqlitePool},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db_options = sqlite::SqliteConnectOptions::new()
-        .filename("portfolio.db")
+    let database_url = "portfolio.db";
+    let db_connect_options = SqliteConnectOptions::new()
+        .filename(&database_url)
         .create_if_missing(true);
 
-    let connection = sqlite::SqlitePool::connect_with(db_options).await?;
+    let connection = SqlitePool::connect_with(db_connect_options).await?;
+    let migrator = Migrator::new(Path::new("./src/db/migrations")).await?;
+
+    migrator.run(&connection).await?;
+
     let fmp_api_key = env::var("FMP_API_KEY").expect("Missing API key");
-
     let mut portfolio = Portfolio::new(String::from("EUR"), connection, fmp_api_key);
-
-    portfolio.initialize_database_tables().await;
 
     portfolio
         .import_transactions("sample_data/transactions.csv")

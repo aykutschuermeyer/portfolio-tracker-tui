@@ -7,7 +7,6 @@ use sqlx::{Pool, Sqlite};
 
 use crate::{
     api::fmp::search_symbol,
-    db::init::{create_assets, create_tickers, create_transactions},
     models::{Asset, AssetType, Holding, Transaction},
 };
 
@@ -36,12 +35,6 @@ impl Portfolio {
             client: Client::new(),
             api_key,
         }
-    }
-
-    pub async fn initialize_database_tables(&self) {
-        let _ = create_tickers(&self.connection).await;
-        let _ = create_assets(&self.connection).await;
-        let _ = create_transactions(&self.connection).await;
     }
 
     pub async fn import_transactions(&mut self, path: &str) -> Result<()> {
