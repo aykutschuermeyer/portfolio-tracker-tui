@@ -3,7 +3,7 @@ use derive_new::new;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use crate::models::Ticker;
+use crate::models::{Asset, AssetType, Ticker};
 
 #[derive(Debug, Deserialize, Getters, new)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +50,7 @@ impl FmpSearchSymbolDto {
     pub fn to_ticker(&self) -> Ticker {
         Ticker::new(
             self.symbol.clone(),
-            self.name.clone(),
+            Asset::new(self.name.clone(), AssetType::Stock, None, None, None),
             self.currency.clone(),
             self.exchange.clone(),
             None,

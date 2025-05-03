@@ -3,10 +3,12 @@ use derive_getters::Getters;
 use derive_new::new;
 use rust_decimal::Decimal;
 
+use super::Asset;
+
 #[derive(Clone, Debug, Getters, new)]
 pub struct Ticker {
     symbol: String,
-    name: String,
+    asset: Asset,
     currency: String,
     exchange: String,
     last_price: Option<Decimal>,

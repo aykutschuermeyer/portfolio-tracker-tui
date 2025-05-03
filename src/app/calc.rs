@@ -23,8 +23,8 @@ pub fn calculate_position_state(
         let quantity_abs = quantity
             .abs()
             .floor()
-            .to_i32()
-            .ok_or_else(|| anyhow::anyhow!("Failed to convert quantity to i32"))?;
+            .to_i64()
+            .ok_or_else(|| anyhow::anyhow!("Failed to convert quantity to i64"))?;
 
         if amount < Decimal::ZERO {
             for _ in 0..quantity_abs {
