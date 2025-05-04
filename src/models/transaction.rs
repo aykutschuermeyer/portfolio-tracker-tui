@@ -8,7 +8,7 @@ use super::{PositionState, Ticker, TransactionGains};
 
 #[derive(Clone, Debug, Getters, new)]
 pub struct Transaction {
-    transaction_no: u32,
+    transaction_no: i64,
     date: DateTime<Local>,
     transaction_type: TransactionType,
     ticker: Ticker,

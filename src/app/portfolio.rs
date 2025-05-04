@@ -11,12 +11,12 @@ use sqlx::{Pool, Row, Sqlite};
 use crate::{
     api::fmp::search_symbol,
     db::write::{insert_asset, insert_ticker, insert_transaction},
-    models::{Asset, AssetType, Holding, Ticker, Transaction},
+    models::{Asset, AssetType, Holding, Ticker, Transaction, TransactionType},
 };
 
 use super::{
     calc::{calculate_position_state, calculate_transaction_gains},
-    utils::{get_exchange_rate, parse_datetime, parse_decimal, parse_transaction_type},
+    utils::{get_exchange_rate, parse_datetime, parse_decimal},
 };
 
 #[derive(Clone, Debug, Getters)]
@@ -76,9 +76,25 @@ impl Portfolio {
         Ok(ticker_map)
     }
 
-    async fn get_last_transaction_no(&mut self) -> Result<u32> {
+    async fn get_existing_forex(&mut self) -> Result<HashMap<i64, Decimal>> {
+        let transaction_forex =
+            sqlx::query("SELECT transaction_no, exchange_rate FROM transactions")
+                .fetch_all(&self.connection)
+                .await?;
+
+        let mut forex_map: HashMap<i64, Decimal> = HashMap::new();
+        for row in transaction_forex {
+            let txn_no = row.get::<i64, _>("transaction_no");
+            let ex_rate = Decimal::from_str(&row.get::<String, _>("exchange_rate"))?;
+            forex_map.insert(txn_no, ex_rate);
+        }
+
+        Ok(forex_map)
+    }
+
+    async fn get_last_transaction_no(&mut self) -> Result<i64> {
         let result =
-            sqlx::query_scalar::<_, Option<u32>>("SELECT MAX(transaction_no) FROM transactions")
+            sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(transaction_no) FROM transactions")
                 .fetch_one(&self.connection)
                 .await?;
 
@@ -90,14 +106,16 @@ impl Portfolio {
             .with_context(|| format!("Failed to open CSV file at path: {}", path))?;
 
         let mut ticker_map = self.get_existing_tickers().await?;
+
+        let forex_map = self.get_existing_forex().await?;
         let _last_transaction_no = self.get_last_transaction_no().await?;
 
         for (i, record) in reader.records().enumerate() {
             let rec = record.with_context(|| format!("Failed to read CSV record {}", i + 1))?;
 
-            let transaction_no = rec[0].parse::<u32>()?;
+            let transaction_no = rec[0].parse::<i64>()?;
             let date = parse_datetime(&rec[1])?;
-            let transaction_type = parse_transaction_type(&rec[2])?;
+            let transaction_type = TransactionType::from_str(&rec[2])?;
             let symbol = rec[3].to_string();
             let quantity = parse_decimal(&rec[4], "quantity")?;
             let price = parse_decimal(&rec[5], "price")?;
@@ -109,7 +127,7 @@ impl Portfolio {
             let standalone_symbol = symbol_split.next().unwrap_or("").to_string();
             let exchange = symbol_split.next().unwrap_or("").to_string();
 
-            let existing_ticker = ticker_map.get(symbol);
+            let existing_ticker = ticker_map.get(&standalone_symbol);
             let (ticker, ticker_id, asset_id) = match existing_ticker {
                 Some(existing_ticker) => existing_ticker,
                 None => {
@@ -125,14 +143,20 @@ impl Portfolio {
 
             let currency = ticker.currency();
 
-            let exchange_rate = get_exchange_rate(
-                &self.base_currency,
-                &currency,
-                &date,
-                &self.client,
-                &self.api_key,
-            )
-            .await?;
+            let existing_forex = forex_map.get(&transaction_no);
+            let exchange_rate = match existing_forex {
+                Some(existing_forex) => existing_forex,
+                None => {
+                    &get_exchange_rate(
+                        &self.base_currency,
+                        &currency,
+                        &date,
+                        &self.client,
+                        &self.api_key,
+                    )
+                    .await?
+                }
+            };
 
             let mut transaction = Transaction::new(
                 transaction_no,
@@ -141,7 +165,7 @@ impl Portfolio {
                 ticker.clone(),
                 broker.clone(),
                 currency.clone(),
-                exchange_rate,
+                *exchange_rate,
                 quantity,
                 price,
                 fees,

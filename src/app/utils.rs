@@ -1,10 +1,10 @@
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Result};
 use chrono::{DateTime, Local, TimeZone};
 use reqwest::Client;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
-use crate::{api::fmp::get_quote_history, models::TransactionType};
+use crate::api::fmp::get_quote_history;
 
 pub fn parse_datetime(field: &str) -> Result<DateTime<Local>> {
     let date_str = format!("{} 00:00:00", field);
@@ -14,15 +14,6 @@ pub fn parse_datetime(field: &str) -> Result<DateTime<Local>> {
     Ok(Local.from_utc_datetime(&naive))
 }
 
-pub fn parse_transaction_type(field: &str) -> Result<TransactionType> {
-    match field {
-        "Buy" => Ok(TransactionType::Buy),
-        "Sell" => Ok(TransactionType::Sell),
-        "Div" => Ok(TransactionType::Div),
-        other => Err(Error::msg(format!("Unknown transaction type '{}'", other))),
-    }
-}
-
 pub fn parse_decimal(field: &str, field_name: &str) -> Result<Decimal> {
     field
         .parse::<Decimal>()
@@ -30,18 +21,18 @@ pub fn parse_decimal(field: &str, field_name: &str) -> Result<Decimal> {
 }
 
 pub async fn get_exchange_rate(
-    base_currency: &String,
-    transaction_currency: &String,
+    base_currency: &str,
+    transaction_currency: &str,
     transaction_date: &DateTime<Local>,
     client: &Client,
-    api_key: &String,
+    api_key: &str,
 ) -> Result<Decimal> {
     if base_currency == transaction_currency {
         return Ok(dec!(1.0));
     }
 
     let quote_result = get_quote_history(
-        &format!("{}{}", *base_currency, *transaction_currency),
+        &format!("{}{}", base_currency, transaction_currency),
         &transaction_date.format("%Y-%m-%d").to_string(),
         &transaction_date.format("%Y-%m-%d").to_string(),
         client,
