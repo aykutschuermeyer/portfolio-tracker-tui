@@ -18,8 +18,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     migrator.run(&connection).await?;
 
-    let fmp_api_key = env::var("FMP_API_KEY").expect("Missing API key");
-    let mut portfolio = Portfolio::new(String::from("EUR"), connection, fmp_api_key);
+    let api_key_av = env::var("ALPHA_VANTAGE_API_KEY").expect("Missing API key");
+    let api_key_fmp = env::var("FMP_API_KEY").expect("Missing API key");
+
+    let mut portfolio = Portfolio::new(String::from("EUR"), connection, api_key_av, api_key_fmp);
 
     portfolio
         .import_transactions("sample_data/transactions.csv")

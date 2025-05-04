@@ -42,3 +42,14 @@ where
         _ => Err(Error::msg("Unexpected API response format: not an array")),
     }
 }
+
+pub async fn parse_response_object<T>(data: Value, error_msg: &str) -> Result<T>
+where
+    T: DeserializeOwned,
+{
+    match data {
+        Value::Object(obj) => serde_json::from_value(Value::Object(obj))
+            .map_err(|_| Error::msg(error_msg.to_string())),
+        _ => Err(Error::msg("Unexpected API response format: not an object")),
+    }
+}

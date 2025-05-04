@@ -27,13 +27,11 @@ mod tests {
     }
 
     #[test]
-    fn it_works() {
+    fn fifo_works() {
         let (amounts, quantities) = set_sample_data();
         let result = calculate_position_state(amounts, quantities).unwrap();
 
-        println!("Cumulative Units: {}", result.cumulative_units());
-        println!("Cumulative Cost: {}", result.cumulative_cost());
-        println!("Cost of Units Sold: {}", result.cost_of_units_sold());
+        println!("Result: {:#?}", result);
 
         assert_eq!(result.cumulative_units().normalize(), dec!(80.0));
         assert_eq!(result.cumulative_cost().normalize(), dec!(7229.43));

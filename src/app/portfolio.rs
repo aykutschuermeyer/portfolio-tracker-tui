@@ -9,7 +9,7 @@ use rust_decimal::Decimal;
 use sqlx::{Pool, Row, Sqlite};
 
 use crate::{
-    api::fmp::search_symbol,
+    api::fmp,
     db::write::{insert_asset, insert_ticker, insert_transaction},
     models::{Asset, AssetType, Holding, Ticker, Transaction, TransactionType},
 };
@@ -23,21 +23,26 @@ use super::{
 pub struct Portfolio {
     base_currency: String,
     connection: Pool<Sqlite>,
-    transactions: Vec<Transaction>,
     holdings: Vec<Holding>,
     client: Client,
-    api_key: String,
+    api_key_av: String,
+    api_key_fmp: String,
 }
 
 impl Portfolio {
-    pub fn new(base_currency: String, connection: Pool<Sqlite>, api_key: String) -> Self {
+    pub fn new(
+        base_currency: String,
+        connection: Pool<Sqlite>,
+        api_key_alpha_vantage: String,
+        api_key_fmp: String,
+    ) -> Self {
         Self {
             base_currency,
             connection,
             holdings: Vec::new(),
-            transactions: Vec::new(),
             client: Client::new(),
-            api_key,
+            api_key_av: api_key_alpha_vantage,
+            api_key_fmp,
         }
     }
 
@@ -85,8 +90,8 @@ impl Portfolio {
         let mut forex_map: HashMap<i64, Decimal> = HashMap::new();
         for row in transaction_forex {
             let txn_no = row.get::<i64, _>("transaction_no");
-            let ex_rate = Decimal::from_str(&row.get::<String, _>("exchange_rate"))?;
-            forex_map.insert(txn_no, ex_rate);
+            let x_rate = Decimal::from_str(&row.get::<String, _>("exchange_rate"))?;
+            forex_map.insert(txn_no, x_rate);
         }
 
         Ok(forex_map)
@@ -105,10 +110,12 @@ impl Portfolio {
         let mut reader = Reader::from_path(path)
             .with_context(|| format!("Failed to open CSV file at path: {}", path))?;
 
-        let mut ticker_map = self.get_existing_tickers().await?;
+        let mut transactions: Vec<Transaction> = Vec::new();
 
+        let ticker_map = self.get_existing_tickers().await?;
         let forex_map = self.get_existing_forex().await?;
-        let _last_transaction_no = self.get_last_transaction_no().await?;
+
+        let _ = self.get_last_transaction_no().await?;
 
         for (i, record) in reader.records().enumerate() {
             let rec = record.with_context(|| format!("Failed to read CSV record {}", i + 1))?;
@@ -131,12 +138,14 @@ impl Portfolio {
             let (ticker, ticker_id, asset_id) = match existing_ticker {
                 Some(existing_ticker) => existing_ticker,
                 None => {
-                    let search_result =
-                        search_symbol(&standalone_symbol, &exchange, &self.client, &self.api_key)
-                            .await?;
+                    let search_result = fmp::search_symbol(
+                        &standalone_symbol,
+                        &exchange,
+                        &self.client,
+                        &self.api_key_fmp,
+                    )
+                    .await?;
                     let ticker = search_result[0].to_ticker();
-                    ticker_map.insert(standalone_symbol, (ticker.clone(), 0, 0));
-
                     &(ticker.clone(), 0, 0)
                 }
             };
@@ -152,7 +161,7 @@ impl Portfolio {
                         &currency,
                         &date,
                         &self.client,
-                        &self.api_key,
+                        &self.api_key_av,
                     )
                     .await?
                 }
@@ -173,8 +182,7 @@ impl Portfolio {
                 None,
             );
 
-            let (mut amounts, mut quantities): (Vec<Decimal>, Vec<Decimal>) = self
-                .transactions
+            let (mut amounts, mut quantities): (Vec<Decimal>, Vec<Decimal>) = transactions
                 .iter()
                 .filter(|t| {
                     t.ticker().asset().name() == ticker.asset().name() && t.broker() == &broker
@@ -194,8 +202,6 @@ impl Portfolio {
             let mut new_asset_id = asset_id.clone();
             let mut new_ticker_id = ticker_id.clone();
 
-            // TODO: Group in database transaction
-
             if new_asset_id == 0 {
                 new_asset_id = insert_asset(transaction.ticker().asset(), &self.connection).await?;
             }
@@ -206,7 +212,7 @@ impl Portfolio {
 
             let _ = insert_transaction(&transaction, &new_ticker_id, &self.connection).await?;
 
-            self.transactions.push(transaction);
+            transactions.push(transaction);
         }
 
         Ok(())
