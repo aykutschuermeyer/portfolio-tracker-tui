@@ -1,11 +1,14 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Local};
 use csv::Reader;
 use derive_getters::Getters;
 use reqwest::Client;
-use rust_decimal::Decimal;
+use rust_decimal::{
+    Decimal,
+    prelude::{FromPrimitive, ToPrimitive},
+};
 use sqlx::{Pool, Row, Sqlite};
 
 use crate::{
@@ -33,7 +36,7 @@ impl Portfolio {
     pub fn new(
         base_currency: String,
         connection: Pool<Sqlite>,
-        api_key_alpha_vantage: String,
+        api_key_av: String,
         api_key_fmp: String,
     ) -> Self {
         Self {
@@ -41,7 +44,7 @@ impl Portfolio {
             connection,
             holdings: Vec::new(),
             client: Client::new(),
-            api_key_av: api_key_alpha_vantage,
+            api_key_av,
             api_key_fmp,
         }
     }
@@ -72,7 +75,7 @@ impl Portfolio {
                 ),
                 row.get::<String, _>("currency"),
                 row.get::<String, _>("exchange"),
-                Decimal::from_str(&row.get::<String, _>("last_price")).ok(),
+                Decimal::from_f64(row.get::<f64, _>("last_price")),
                 row.get::<Option<DateTime<Local>>, _>("last_price_updated_at"),
             );
             ticker_map.insert(symbol, (ticker, ticker_id, asset_id));
@@ -90,7 +93,8 @@ impl Portfolio {
         let mut forex_map: HashMap<i64, Decimal> = HashMap::new();
         for row in transaction_forex {
             let txn_no = row.get::<i64, _>("transaction_no");
-            let x_rate = Decimal::from_str(&row.get::<String, _>("exchange_rate"))?;
+            let x_rate =
+                Decimal::from_f64(row.get::<f64, _>("exchange_rate")).unwrap_or(Decimal::ZERO);
             forex_map.insert(txn_no, x_rate);
         }
 
@@ -145,8 +149,7 @@ impl Portfolio {
                         &self.api_key_fmp,
                     )
                     .await?;
-                    let ticker = search_result[0].to_ticker();
-                    &(ticker.clone(), 0, 0)
+                    &(search_result[0].to_ticker(), 0, 0)
                 }
             };
 
@@ -161,7 +164,7 @@ impl Portfolio {
                         &currency,
                         &date,
                         &self.client,
-                        &self.api_key_av,
+                        &self.api_key_fmp,
                     )
                     .await?
                 }
@@ -213,6 +216,31 @@ impl Portfolio {
             let _ = insert_transaction(&transaction, &new_ticker_id, &self.connection).await?;
 
             transactions.push(transaction);
+        }
+
+        Ok(())
+    }
+
+    pub async fn update_prices(&self) -> Result<()> {
+        let tickers = sqlx::query("SELECT symbol FROM tickers")
+            .fetch_all(&self.connection)
+            .await?;
+
+        for row in tickers {
+            let symbol = row.get::<&str, _>("symbol");
+            let quote = fmp::get_quote(&symbol, &self.client, &self.api_key_fmp).await?;
+            let price = *quote[0].price();
+            sqlx::query(
+                r#"
+                UPDATE tickers 
+                SET last_price = ?, last_price_updated_at = DATETIME('now') 
+                WHERE symbol = ?
+                "#,
+            )
+            .bind(price.to_f64())
+            .bind(symbol)
+            .execute(&self.connection)
+            .await?;
         }
 
         Ok(())

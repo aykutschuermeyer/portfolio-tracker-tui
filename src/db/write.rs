@@ -1,4 +1,5 @@
 use anyhow::Result;
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 use sqlx::{Pool, Sqlite};
 
 use crate::models::{Asset, Ticker, Transaction};
@@ -28,6 +29,7 @@ pub async fn insert_ticker(
     asset_id: &i64,
     connection: &Pool<Sqlite>,
 ) -> Result<i64> {
+    let last_price = ticker.last_price().unwrap_or(Decimal::ZERO);
     let id = sqlx::query(
         r#"
             INSERT OR IGNORE INTO tickers 
@@ -39,7 +41,7 @@ pub async fn insert_ticker(
     .bind(asset_id)
     .bind(ticker.currency())
     .bind(ticker.exchange())
-    .bind(ticker.last_price().map(|d| d.to_string()))
+    .bind(last_price.round_dp(4).to_f64())
     .bind(ticker.last_price_updated_at())
     .execute(connection)
     .await?
@@ -92,15 +94,15 @@ pub async fn insert_transaction(
     .bind(ticker_id)
     .bind(transaction.broker())
     .bind(transaction.currency())
-    .bind(transaction.exchange_rate().to_string())
-    .bind(transaction.quantity().to_string())
-    .bind(transaction.price().to_string())
-    .bind(transaction.fees().to_string())
-    .bind(position_state.cumulative_units().to_string())
-    .bind(position_state.cumulative_cost().to_string())
-    .bind(position_state.cost_of_units_sold().to_string())
-    .bind(transaction_gains.realized_gains().to_string())
-    .bind(transaction_gains.dividends_collected().to_string())
+    .bind(transaction.exchange_rate().round_dp(4).to_f64())
+    .bind(transaction.quantity().round_dp(4).to_f64())
+    .bind(transaction.price().round_dp(4).to_f64())
+    .bind(transaction.fees().round_dp(4).to_f64())
+    .bind(position_state.cumulative_units().round_dp(4).to_f64())
+    .bind(position_state.cumulative_cost().round_dp(4).to_f64())
+    .bind(position_state.cost_of_units_sold().round_dp(4).to_f64())
+    .bind(transaction_gains.realized_gains().round_dp(4).to_f64())
+    .bind(transaction_gains.dividends_collected().round_dp(4).to_f64())
     .execute(connection)
     .await?
     .last_insert_rowid();

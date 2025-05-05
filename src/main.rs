@@ -27,6 +27,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .import_transactions("sample_data/transactions.csv")
         .await?;
 
+    portfolio.update_prices().await?;
+
     let mut app = App::new(portfolio);
     app.run()?;
 

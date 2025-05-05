@@ -12,6 +12,8 @@ pub async fn make_request(
     let url = format!("{}/{}&apikey={}", base_url, endpoint, api_key);
     let res = client.get(&url).send().await?;
 
+    // println!("{:#?}", url);
+
     if !res.status().is_success() {
         return Err(Error::msg(format!("Request failed: {}", res.status())));
     }
