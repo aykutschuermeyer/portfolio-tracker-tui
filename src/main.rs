@@ -10,7 +10,7 @@ use sqlx::{
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = "portfolio.db";
     let db_connect_options = SqliteConnectOptions::new()
-        .filename(&database_url)
+        .filename(database_url)
         .create_if_missing(true);
 
     let connection = SqlitePool::connect_with(db_connect_options).await?;
@@ -23,11 +23,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut portfolio = Portfolio::new(String::from("EUR"), connection, api_key_av, api_key_fmp);
 
-    // portfolio
-    //     .import_transactions("sample_data/transactions.csv")
-    //     .await?;
+    //portfolio
+    //    .import_transactions("sample_data/transactions.csv")
+    //    .await?;
 
-    // portfolio.update_prices().await?;
+    //portfolio.update_prices().await?;
 
     portfolio.set_holdings().await?;
 

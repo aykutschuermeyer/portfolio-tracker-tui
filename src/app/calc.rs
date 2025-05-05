@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
-use rust_decimal::{Decimal, prelude::ToPrimitive};
+use rust_decimal::{prelude::ToPrimitive, Decimal};
 
 use crate::models::{PositionState, Transaction, TransactionGains, TransactionType};
 
@@ -40,7 +40,7 @@ pub fn calculate_position_state(
 
             // Correct for edge case with decimal units
             if cumulative_units.round_dp(4) == Decimal::ZERO {
-                while queue.len() > 0 {
+                while !queue.is_empty() {
                     queue.pop_front();
                 }
             }

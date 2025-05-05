@@ -6,8 +6,8 @@ use csv::Reader;
 use derive_getters::Getters;
 use reqwest::Client;
 use rust_decimal::{
-    Decimal,
     prelude::{FromPrimitive, ToPrimitive},
+    Decimal,
 };
 use rust_decimal_macros::dec;
 use sqlx::{Pool, Row, Sqlite};
@@ -61,7 +61,6 @@ impl Portfolio {
                 FROM
                     transactions
             ),
-
             cte_transactions AS (
                 SELECT
                     *
@@ -70,7 +69,6 @@ impl Portfolio {
                 WHERE
                     rn = 1
             )
-
             SELECT
                 assets.name,
                 assets.asset_type,
@@ -88,7 +86,6 @@ impl Portfolio {
                 assets ON tickers.asset_id = assets.id
             LEFT JOIN
                 cte_transactions ON cte_transactions.ticker_id = tickers.id
-
             "#
         ).fetch_all(&self.connection).await?;
 
@@ -116,7 +113,7 @@ impl Portfolio {
                 Holding::new(
                     Asset::new(
                         row.get::<String, _>("name"),
-                        AssetType::from_str(&row.get::<String, _>("asset_type"))
+                        AssetType::parse_str(&row.get::<String, _>("asset_type"))
                             .unwrap_or(AssetType::Stock),
                         row.get::<Option<String>, _>("isin"),
                         row.get::<Option<String>, _>("sector"),
@@ -161,7 +158,7 @@ impl Portfolio {
                 symbol.clone(),
                 Asset::new(
                     row.get::<String, _>("name"),
-                    AssetType::from_str(row.get::<&str, _>("asset_type"))?,
+                    AssetType::parse_str(row.get::<&str, _>("asset_type"))?,
                     row.get::<Option<String>, _>("isin"),
                     row.get::<Option<String>, _>("sector"),
                     row.get::<Option<String>, _>("industry"),
@@ -219,7 +216,7 @@ impl Portfolio {
 
             let transaction_no = rec[0].parse::<i64>()?;
             let date = parse_datetime(&rec[1])?;
-            let transaction_type = TransactionType::from_str(&rec[2])?;
+            let transaction_type = TransactionType::parse_str(&rec[2])?;
             let symbol = rec[3].to_string();
             let quantity = parse_decimal(&rec[4], "quantity")?;
             let price = parse_decimal(&rec[5], "price")?;
@@ -254,7 +251,7 @@ impl Portfolio {
                 None => {
                     &get_exchange_rate(
                         &self.base_currency,
-                        &currency,
+                        currency,
                         &date,
                         &self.client,
                         &self.api_key_fmp,
@@ -298,8 +295,8 @@ impl Portfolio {
             transaction.set_position_state(Some(position_state));
             transaction.set_transaction_gains(Some(transaction_gains));
 
-            let mut new_asset_id = asset_id.clone();
-            let mut new_ticker_id = ticker_id.clone();
+            let mut new_asset_id = *asset_id;
+            let mut new_ticker_id = *ticker_id;
 
             if new_asset_id == 0 {
                 new_asset_id = insert_asset(transaction.ticker().asset(), &self.connection).await?;
@@ -324,7 +321,7 @@ impl Portfolio {
 
         for row in tickers {
             let symbol = row.get::<&str, _>("symbol");
-            let quote = fmp::get_quote(&symbol, &self.client, &self.api_key_fmp).await?;
+            let quote = fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await?;
             let price = *quote[0].price();
 
             sqlx::query(

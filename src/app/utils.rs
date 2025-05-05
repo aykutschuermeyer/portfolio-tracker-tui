@@ -41,8 +41,8 @@ pub async fn get_exchange_rate(
     .await?;
 
     if let Some(first_quote) = quote_result.first() {
-        return Ok(dec!(1) / *first_quote.price());
+        Ok(dec!(1) / *first_quote.price())
     } else {
-        return Err(anyhow::anyhow!("No quote data available"));
+        Err(anyhow::anyhow!("No quote data available"))
     }
 }

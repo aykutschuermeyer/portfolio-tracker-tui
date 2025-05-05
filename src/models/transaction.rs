@@ -24,19 +24,19 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn get_amount(&self) -> Decimal {
-        let amount = &self.price * &self.exchange_rate * &self.quantity + &self.fees;
+        let amount = self.price * self.exchange_rate * self.quantity + self.fees;
         if self.transaction_type == TransactionType::Buy {
-            return -amount.clone();
+            -amount
         } else {
-            return amount.clone();
+            amount
         }
     }
 
     pub fn get_quantity(&self) -> Decimal {
         if self.transaction_type == TransactionType::Buy {
-            return self.quantity.clone();
+            self.quantity
         } else {
-            return -self.quantity.clone();
+            -self.quantity
         }
     }
 
@@ -57,7 +57,7 @@ pub enum TransactionType {
 }
 
 impl TransactionType {
-    pub fn from_str(s: &str) -> Result<TransactionType> {
+    pub fn parse_str(s: &str) -> Result<TransactionType> {
         match s {
             "Buy" => Ok(TransactionType::Buy),
             "Sell" => Ok(TransactionType::Sell),

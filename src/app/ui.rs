@@ -1,8 +1,8 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+    Frame,
 };
 use rust_decimal::Decimal;
 
@@ -51,12 +51,12 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
         let name = position.asset().name();
         // let ticker_symbol = position.asset().tickers()[0].symbol();
         let quantity = format!("{:.2}", position.quantity());
-        let price = format!("${:.2}", position.price());
-        let market_value = format!("${:.2}", position.market_value());
-        let cost_basis = format!("${:.2}", position.total_cost());
-        let realized_gain = format!("${:.2}", position.realized_gain());
-        let dividends_collected = format!("${:.2}", position.dividends_collected());
-        let total_gain = format!("${:.2}", position.total_gain());
+        let price = format!("{:.2}", position.price());
+        let market_value = format!("{:.2}", position.market_value());
+        let cost_basis = format!("{:.2}", position.total_cost());
+        let realized_gain = format!("{:.2}", position.realized_gain());
+        let dividends_collected = format!("{:.2}", position.dividends_collected());
+        let total_gain = format!("{:.2}", position.total_gain());
 
         let unrealized_gain = *position.unrealized_gain();
         let gain_loss_color = if unrealized_gain >= Decimal::ZERO {
@@ -64,7 +64,7 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
         } else {
             Color::Red
         };
-        let unrealized_gain_str = format!("${:.2}", unrealized_gain.abs());
+        let unrealized_gain_str = format!("{:.2}", unrealized_gain.abs());
 
         let gain_loss_percent = *position.unrealized_gain_percent();
         let gain_loss_percent_str = format!("{:.2}%", gain_loss_percent.abs());

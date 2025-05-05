@@ -17,7 +17,7 @@ pub async fn get_quote(
         "?function=GLOBAL_QUOTE&symbol={}&apikey={}",
         ticker_symbol, api_key
     );
-    let res = make_request(client, BASE_URL, &endpoint, &api_key).await?;
+    let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
 
     let global_quote = res
         .get("Global Quote")
@@ -41,7 +41,7 @@ pub async fn search_symbol(
         "?function=SYMBOL_SEARCH&keywords={}&apikey={}",
         &ticker_symbol, api_key
     );
-    let res = make_request(client, BASE_URL, &endpoint, &api_key).await?;
+    let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
 
     let best_matches = res
         .get("bestMatches")

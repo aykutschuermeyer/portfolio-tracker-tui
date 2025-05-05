@@ -23,7 +23,7 @@ pub enum AssetType {
 }
 
 impl AssetType {
-    pub fn from_str(s: &str) -> Result<AssetType> {
+    pub fn parse_str(s: &str) -> Result<AssetType> {
         match s {
             "Stock" => Ok(AssetType::Stock),
             "Bond" => Ok(AssetType::Bond),
