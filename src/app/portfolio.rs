@@ -9,6 +9,7 @@ use rust_decimal::{
     Decimal,
     prelude::{FromPrimitive, ToPrimitive},
 };
+use rust_decimal_macros::dec;
 use sqlx::{Pool, Row, Sqlite};
 
 use crate::{
@@ -47,6 +48,98 @@ impl Portfolio {
             api_key_av,
             api_key_fmp,
         }
+    }
+
+    pub async fn set_holdings(&mut self) -> Result<()> {
+        let tickers = sqlx::query(
+            r#"
+            WITH
+            cte_transactions_rn AS (
+                SELECT 
+                    transactions.*,
+                    ROW_NUMBER() OVER (PARTITION BY ticker_id, broker ORDER BY transaction_no DESC) AS rn
+                FROM
+                    transactions
+            ),
+
+            cte_transactions AS (
+                SELECT
+                    *
+                FROM
+                    cte_transactions_rn
+                WHERE
+                    rn = 1
+            )
+
+            SELECT
+                assets.name,
+                assets.asset_type,
+                assets.isin,
+                assets.sector,
+                assets.industry,
+                tickers.last_price,
+                cte_transactions.cumulative_units,
+                cte_transactions.cumulative_cost,
+                cte_transactions.realized_gains,
+                cte_transactions.dividends_collected
+            FROM
+                tickers
+            LEFT JOIN
+                assets ON tickers.asset_id = assets.id
+            LEFT JOIN
+                cte_transactions ON cte_transactions.ticker_id = tickers.id
+
+            "#
+        ).fetch_all(&self.connection).await?;
+
+        let holdings: Vec<Holding> = tickers
+            .iter()
+            .map(|row| {
+                let quantity = Decimal::from_f64(row.get::<f64, _>("cumulative_units"))
+                    .unwrap_or(Decimal::ZERO);
+                let price =
+                    Decimal::from_f64(row.get::<f64, _>("last_price")).unwrap_or(Decimal::ZERO);
+                let market_value = (price * quantity).round();
+                let total_cost = Decimal::from_f64(row.get::<f64, _>("cumulative_cost"))
+                    .unwrap_or(Decimal::ZERO);
+                let cost_per_share = (total_cost / quantity).round_dp(4);
+                let unrealized_gain = market_value - total_cost;
+                let unrealized_gain_percent =
+                    ((unrealized_gain / total_cost) * dec!(100)).round_dp(2);
+                let realized_gain =
+                    Decimal::from_f64(row.get::<f64, _>("realized_gains")).unwrap_or(Decimal::ZERO);
+                let dividends_collected =
+                    Decimal::from_f64(row.get::<f64, _>("dividends_collected"))
+                        .unwrap_or(Decimal::ZERO);
+                let total_gain = unrealized_gain + realized_gain + dividends_collected;
+
+                Holding::new(
+                    Asset::new(
+                        row.get::<String, _>("name"),
+                        AssetType::from_str(&row.get::<String, _>("asset_type"))
+                            .unwrap_or(AssetType::Stock),
+                        row.get::<Option<String>, _>("isin"),
+                        row.get::<Option<String>, _>("sector"),
+                        row.get::<Option<String>, _>("industry"),
+                    ),
+                    quantity,
+                    price,
+                    market_value,
+                    total_cost,
+                    cost_per_share,
+                    unrealized_gain,
+                    unrealized_gain_percent,
+                    realized_gain,
+                    dividends_collected,
+                    total_gain,
+                )
+            })
+            .collect();
+
+        self.holdings.clear();
+        self.holdings = holdings;
+
+        Ok(())
     }
 
     async fn get_existing_tickers(&mut self) -> Result<HashMap<String, (Ticker, i64, i64)>> {
@@ -188,7 +281,10 @@ impl Portfolio {
             let (mut amounts, mut quantities): (Vec<Decimal>, Vec<Decimal>) = transactions
                 .iter()
                 .filter(|t| {
-                    t.ticker().asset().name() == ticker.asset().name() && t.broker() == &broker
+                    // t.ticker().asset().name() == ticker.asset().name() && t.broker() == &broker
+                    t.ticker().symbol() == ticker.symbol()
+                        && t.broker() == &broker
+                        && t.currency() == currency
                 })
                 .map(|t| (t.get_amount(), t.get_quantity()))
                 .unzip();
@@ -230,6 +326,7 @@ impl Portfolio {
             let symbol = row.get::<&str, _>("symbol");
             let quote = fmp::get_quote(&symbol, &self.client, &self.api_key_fmp).await?;
             let price = *quote[0].price();
+
             sqlx::query(
                 r#"
                 UPDATE tickers 
