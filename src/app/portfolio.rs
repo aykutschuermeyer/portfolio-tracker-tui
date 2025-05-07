@@ -14,7 +14,7 @@ use sqlx::{Pool, Row, Sqlite};
 
 use crate::{
     api::fmp,
-    db::write::{insert_asset, insert_ticker, insert_transaction},
+    db::write::{insert_ticker, insert_transaction},
     models::{Asset, AssetType, Holding, Ticker, Transaction, TransactionType},
 };
 
@@ -139,7 +139,7 @@ impl Portfolio {
         Ok(())
     }
 
-    async fn get_existing_tickers(&mut self) -> Result<HashMap<String, (Ticker, i64, i64)>> {
+    async fn get_existing_tickers(&mut self) -> Result<HashMap<String, (Ticker, i64)>> {
         let tickers = sqlx::query(
             r#"
             SELECT * FROM tickers
@@ -149,11 +149,10 @@ impl Portfolio {
         .fetch_all(&self.connection)
         .await?;
 
-        let mut ticker_map: HashMap<String, (Ticker, i64, i64)> = HashMap::new();
+        let mut ticker_map: HashMap<String, (Ticker, i64)> = HashMap::new();
         for row in tickers {
             let symbol: String = row.get::<String, _>("symbol");
             let ticker_id = row.get::<i64, _>("id");
-            let asset_id = row.get::<i64, _>("asset_id");
             let ticker = Ticker::new(
                 symbol.clone(),
                 Asset::new(
@@ -164,11 +163,11 @@ impl Portfolio {
                     row.get::<Option<String>, _>("industry"),
                 ),
                 row.get::<String, _>("currency"),
-                row.get::<String, _>("exchange"),
+                row.get("exchange"),
                 Decimal::from_f64(row.get::<f64, _>("last_price")),
                 row.get::<Option<DateTime<Local>>, _>("last_price_updated_at"),
             );
-            ticker_map.insert(symbol, (ticker, ticker_id, asset_id));
+            ticker_map.insert(symbol, (ticker, ticker_id));
         }
 
         Ok(ticker_map)
@@ -206,7 +205,7 @@ impl Portfolio {
 
         let mut transactions: Vec<Transaction> = Vec::new();
 
-        let ticker_map = self.get_existing_tickers().await?;
+        let mut ticker_map = self.get_existing_tickers().await?;
         let forex_map = self.get_existing_forex().await?;
 
         let _ = self.get_last_transaction_no().await?;
@@ -223,23 +222,16 @@ impl Portfolio {
             let fees = parse_decimal(&rec[6], "fees")?;
             let broker = rec[7].to_string();
 
-            let symbol: &str = &symbol;
-            let mut symbol_split = symbol.split('.');
-            let standalone_symbol = symbol_split.next().unwrap_or("").to_string();
-            let exchange = symbol_split.next().unwrap_or("").to_string();
-
-            let existing_ticker = ticker_map.get(&standalone_symbol);
-            let (ticker, ticker_id, asset_id) = match existing_ticker {
+            let existing_ticker = ticker_map.get(&symbol);
+            let (ticker, ticker_id) = match existing_ticker {
                 Some(existing_ticker) => existing_ticker,
                 None => {
-                    let search_result = fmp::search_symbol(
-                        &standalone_symbol,
-                        &exchange,
-                        &self.client,
-                        &self.api_key_fmp,
-                    )
-                    .await?;
-                    &(search_result[0].to_ticker(), 0, 0)
+                    let search_result =
+                        fmp::search_symbol(&symbol, &self.client, &self.api_key_fmp).await?;
+                    let ticker = search_result[0].to_ticker();
+                    let new_ticker_id = insert_ticker(&ticker, &self.connection).await?;
+                    ticker_map.insert(symbol, (ticker.clone(), new_ticker_id));
+                    &(ticker, 0)
                 }
             };
 
@@ -280,6 +272,8 @@ impl Portfolio {
                 .filter(|t| {
                     // t.ticker().asset().name() == ticker.asset().name() && t.broker() == &broker
                     t.ticker().symbol() == ticker.symbol()
+                        && (*t.transaction_type() == TransactionType::Buy
+                            || *t.transaction_type() == TransactionType::Sell)
                         && t.broker() == &broker
                         && t.currency() == currency
                 })
@@ -295,18 +289,7 @@ impl Portfolio {
             transaction.set_position_state(Some(position_state));
             transaction.set_transaction_gains(Some(transaction_gains));
 
-            let mut new_asset_id = *asset_id;
-            let mut new_ticker_id = *ticker_id;
-
-            if new_asset_id == 0 {
-                new_asset_id = insert_asset(transaction.ticker().asset(), &self.connection).await?;
-            }
-
-            if new_ticker_id == 0 {
-                new_ticker_id = insert_ticker(ticker, &new_asset_id, &self.connection).await?;
-            }
-
-            let _ = insert_transaction(&transaction, &new_ticker_id, &self.connection).await?;
+            let _ = insert_transaction(&transaction, ticker_id, &self.connection).await?;
 
             transactions.push(transaction);
         }

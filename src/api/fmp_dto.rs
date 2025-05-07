@@ -52,7 +52,7 @@ impl FmpSearchSymbolDto {
             self.symbol.clone(),
             Asset::new(self.name.clone(), AssetType::Stock, None, None, None),
             self.currency.clone(),
-            self.exchange.clone(),
+            Some(self.exchange.clone()),
             None,
             None,
         )

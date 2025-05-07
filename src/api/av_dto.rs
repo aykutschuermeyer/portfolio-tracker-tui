@@ -58,7 +58,7 @@ impl AvSymbolSearchDto {
             self.symbol.clone(),
             Asset::new(self.name.clone(), AssetType::Stock, None, None, None),
             self.currency.clone(),
-            String::from(""),
+            Some(String::from("")),
             None,
             None,
         )

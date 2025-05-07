@@ -8,11 +8,10 @@ use sqlx::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let database_url = "portfolio.db";
+    let database_url = shellexpand::tilde("~/.config/portfolio-tracker-tui/portfolio.db");
     let db_connect_options = SqliteConnectOptions::new()
-        .filename(database_url)
+        .filename(database_url.as_ref())
         .create_if_missing(true);
-
     let connection = SqlitePool::connect_with(db_connect_options).await?;
     let migrator = Migrator::new(Path::new("./src/db/migrations")).await?;
 
@@ -23,9 +22,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut portfolio = Portfolio::new(String::from("EUR"), connection, api_key_av, api_key_fmp);
 
-    //portfolio
-    //    .import_transactions("sample_data/transactions.csv")
-    //    .await?;
+    let csv_path = shellexpand::tilde("~/.config/portfolio-tracker-tui/transactions.csv");
+    portfolio.import_transactions(&csv_path).await?;
 
     //portfolio.update_prices().await?;
 

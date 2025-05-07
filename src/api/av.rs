@@ -8,14 +8,10 @@ use super::{
 
 const BASE_URL: &str = "https://www.alphavantage.co/query";
 
-pub async fn get_quote(
-    ticker_symbol: &str,
-    api_key: &str,
-    client: &Client,
-) -> Result<AvGlobalQuoteDto> {
+pub async fn get_quote(symbol: &str, api_key: &str, client: &Client) -> Result<AvGlobalQuoteDto> {
     let endpoint = format!(
         "?function=GLOBAL_QUOTE&symbol={}&apikey={}",
-        ticker_symbol, api_key
+        symbol, api_key
     );
     let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
 
@@ -25,21 +21,19 @@ pub async fn get_quote(
 
     parse_response_object::<AvGlobalQuoteDto>(
         global_quote.clone(),
-        &format!("Failed to get data for ticker {}", ticker_symbol),
+        &format!("Failed to get data for ticker {}", symbol),
     )
     .await
 }
 
 pub async fn search_symbol(
     symbol: &str,
-    exchange: &str,
     client: &Client,
     api_key: &str,
 ) -> Result<Vec<AvSymbolSearchDto>> {
-    let ticker_symbol = format!("{}.{}", symbol, exchange);
     let endpoint = format!(
         "?function=SYMBOL_SEARCH&keywords={}&apikey={}",
-        &ticker_symbol, api_key
+        &symbol, api_key
     );
     let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
 
@@ -49,7 +43,7 @@ pub async fn search_symbol(
 
     parse_response_array::<AvSymbolSearchDto>(
         best_matches.clone(),
-        &format!("Failed to get data for ticker {}", &ticker_symbol),
+        &format!("Failed to get data for ticker {}", &symbol),
     )
     .await
 }

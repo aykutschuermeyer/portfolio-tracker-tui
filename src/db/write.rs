@@ -1,34 +1,43 @@
 use anyhow::Result;
-use rust_decimal::{Decimal, prelude::ToPrimitive};
-use sqlx::{Pool, Sqlite};
+use rust_decimal::{prelude::ToPrimitive, Decimal};
+use sqlx::{Pool, Row, Sqlite};
 
-use crate::models::{Asset, Ticker, Transaction};
+use crate::models::{Ticker, Transaction};
 
-pub async fn insert_asset(asset: &Asset, connection: &Pool<Sqlite>) -> Result<i64> {
-    let id = sqlx::query(
+pub async fn insert_ticker(ticker: &Ticker, connection: &Pool<Sqlite>) -> Result<i64> {
+    let mut tnx = connection.begin().await?;
+    let asset_id = sqlx::query(
         r#"
-        INSERT OR IGNORE INTO assets 
-        (name, asset_type, isin, sector, industry) 
-        VALUES (?, ?, ?, ?, ?)
-    "#,
+        SELECT id FROM assets
+        WHERE name = ?
+        "#,
     )
-    .bind(asset.name())
-    .bind(asset.asset_type().to_str())
-    .bind(asset.isin())
-    .bind(asset.sector())
-    .bind(asset.industry())
-    .execute(connection)
-    .await?
-    .last_insert_rowid();
+    .bind(ticker.asset().name())
+    .fetch_one(&mut *tnx)
+    .await;
 
-    Ok(id)
-}
+    let asset_id = match asset_id {
+        Ok(row) => row.get::<i64, _>("id"),
+        Err(_) => {
+            let asset = ticker.asset();
+            sqlx::query(
+                r#"
+                INSERT OR IGNORE INTO assets 
+                (name, asset_type, isin, sector, industry) 
+                VALUES (?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(asset.name())
+            .bind(asset.asset_type().to_str())
+            .bind(asset.isin())
+            .bind(asset.sector())
+            .bind(asset.industry())
+            .execute(&mut *tnx)
+            .await?
+            .last_insert_rowid()
+        }
+    };
 
-pub async fn insert_ticker(
-    ticker: &Ticker,
-    asset_id: &i64,
-    connection: &Pool<Sqlite>,
-) -> Result<i64> {
     let last_price = ticker.last_price().unwrap_or(Decimal::ZERO);
     let id = sqlx::query(
         r#"
@@ -43,9 +52,11 @@ pub async fn insert_ticker(
     .bind(ticker.exchange())
     .bind(last_price.round_dp(4).to_f64())
     .bind(ticker.last_price_updated_at())
-    .execute(connection)
+    .execute(&mut *tnx)
     .await?
     .last_insert_rowid();
+
+    tnx.commit().await?;
 
     Ok(id)
 }

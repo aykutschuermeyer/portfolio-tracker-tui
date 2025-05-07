@@ -10,7 +10,7 @@ pub struct Ticker {
     symbol: String,
     asset: Asset,
     currency: String,
-    exchange: String,
+    exchange: Option<String>,
     last_price: Option<Decimal>,
     last_price_updated_at: Option<DateTime<Local>>,
 }
