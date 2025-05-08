@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Local};
@@ -13,7 +13,7 @@ use rust_decimal_macros::dec;
 use sqlx::{Pool, Row, Sqlite};
 
 use crate::{
-    api::fmp,
+    api::{av, fmp},
     db::write::{insert_ticker, insert_transaction},
     models::{Asset, AssetType, Holding, Ticker, Transaction, TransactionType},
 };
@@ -304,8 +304,15 @@ impl Portfolio {
 
         for row in tickers {
             let symbol = row.get::<&str, _>("symbol");
-            let quote = fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await?;
-            let price = *quote[0].price();
+            let quote_result = fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await;
+
+            let price = match quote_result {
+                Ok(quote) if !quote.is_empty() => *quote[0].price(),
+                _ => {
+                    let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await?;
+                    Decimal::from_str(av_quote.price()).unwrap()
+                }
+            };
 
             sqlx::query(
                 r#"

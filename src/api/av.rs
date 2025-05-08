@@ -6,22 +6,21 @@ use super::{
     utils::{make_request, parse_response_array, parse_response_object},
 };
 
-const BASE_URL: &str = "https://www.alphavantage.co/query";
+const BASE_URL: &str = "https://www.alphavantage.co";
 
-pub async fn get_quote(symbol: &str, api_key: &str, client: &Client) -> Result<AvGlobalQuoteDto> {
-    let endpoint = format!(
-        "?function=GLOBAL_QUOTE&symbol={}&apikey={}",
-        symbol, api_key
-    );
-    let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
+pub async fn get_quote(symbol: &str, client: &Client, api_key: &str) -> Result<AvGlobalQuoteDto> {
+    let params = format!("function=GLOBAL_QUOTE&symbol={}&apikey={}", symbol, api_key);
+    let res = make_request(client, BASE_URL, "query", &params).await?;
 
     let global_quote = res
         .get("Global Quote")
         .ok_or_else(|| anyhow::anyhow!("Failed to find 'Global Quote' in the response"))?;
 
+    println!("{:#?}", global_quote);
+
     parse_response_object::<AvGlobalQuoteDto>(
         global_quote.clone(),
-        &format!("Failed to get data for ticker {}", symbol),
+        &format!("No results for symbol {}", symbol),
     )
     .await
 }
@@ -31,11 +30,8 @@ pub async fn search_symbol(
     client: &Client,
     api_key: &str,
 ) -> Result<Vec<AvSymbolSearchDto>> {
-    let endpoint = format!(
-        "?function=SYMBOL_SEARCH&keywords={}&apikey={}",
-        &symbol, api_key
-    );
-    let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
+    let params = format!("function=GLOBAL_QUOTE&symbol={}&apikey={}", symbol, api_key);
+    let res = make_request(client, BASE_URL, "query", &params).await?;
 
     let best_matches = res
         .get("bestMatches")
@@ -43,7 +39,7 @@ pub async fn search_symbol(
 
     parse_response_array::<AvSymbolSearchDto>(
         best_matches.clone(),
-        &format!("Failed to get data for ticker {}", &symbol),
+        &format!("No results for symbol {}", &symbol),
     )
     .await
 }

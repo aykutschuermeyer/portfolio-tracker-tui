@@ -18,7 +18,7 @@ pub struct AvGlobalQuoteDto {
     #[serde(rename = "05. price")]
     price: String,
     #[serde(rename = "06. volume")]
-    volume: i64,
+    volume: String,
     #[serde(rename = "07. latest trading day")]
     latest_trading_day: String,
     #[serde(rename = "08. previous close")]

@@ -25,8 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let csv_path = shellexpand::tilde("~/.config/portfolio-tracker-tui/transactions.csv");
     portfolio.import_transactions(&csv_path).await?;
 
-    //portfolio.update_prices().await?;
-
+    portfolio.update_prices().await?;
     portfolio.set_holdings().await?;
 
     let mut app = App::new(portfolio);

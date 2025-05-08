@@ -13,8 +13,8 @@ pub async fn search_symbol(
     client: &Client,
     api_key: &str,
 ) -> Result<Vec<FmpSearchSymbolDto>> {
-    let endpoint = format!("search-symbol?query={}", symbol);
-    let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
+    let params = format!("query={}&apikey={}", symbol, api_key);
+    let res = make_request(client, BASE_URL, "search-symbol", &params).await?;
     parse_response_array::<FmpSearchSymbolDto>(res, &format!("No results for symbol {symbol}"))
         .await
 }
