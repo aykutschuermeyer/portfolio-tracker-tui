@@ -54,6 +54,16 @@ impl Portfolio {
         let tickers = sqlx::query(
             r#"
             WITH
+            cte_realized_gains_dividends AS (
+                SELECT
+                    ticker_id,
+                    SUM(realized_gains) as realized_gains,
+                    SUM(dividends_collected) as dividends_collected
+                FROM
+                    transactions
+                GROUP BY
+                    ticker_id
+            ),
             cte_transactions_rn AS (
                 SELECT 
                     transactions.*,
@@ -78,12 +88,14 @@ impl Portfolio {
                 tickers.last_price,
                 cte_transactions.cumulative_units,
                 cte_transactions.cumulative_cost,
-                cte_transactions.realized_gains,
-                cte_transactions.dividends_collected
+                cte_realized_gains_dividends.realized_gains,
+                cte_realized_gains_dividends.dividends_collected
             FROM
                 tickers
             LEFT JOIN
                 assets ON tickers.asset_id = assets.id
+            LEFT JOIN
+                cte_realized_gains_dividends ON tickers.id = cte_realized_gains_dividends.ticker_id
             LEFT JOIN
                 cte_transactions ON cte_transactions.ticker_id = tickers.id
             "#
@@ -208,12 +220,16 @@ impl Portfolio {
         let mut ticker_map = self.get_existing_tickers().await?;
         let forex_map = self.get_existing_forex().await?;
 
-        let _ = self.get_last_transaction_no().await?;
+        let last_transaction_no = self.get_last_transaction_no().await?;
 
         for (i, record) in reader.records().enumerate() {
             let rec = record.with_context(|| format!("Failed to read CSV record {}", i + 1))?;
 
             let transaction_no = rec[0].parse::<i64>()?;
+            if transaction_no <= last_transaction_no {
+                continue;
+            }
+
             let date = parse_datetime(&rec[1])?;
             let transaction_type = TransactionType::parse_str(&rec[2])?;
             let symbol = rec[3].to_string();
@@ -231,7 +247,7 @@ impl Portfolio {
                     let ticker = search_result[0].to_ticker();
                     let new_ticker_id = insert_ticker(&ticker, &self.connection).await?;
                     ticker_map.insert(symbol, (ticker.clone(), new_ticker_id));
-                    &(ticker, 0)
+                    &(ticker, new_ticker_id)
                 }
             };
 

@@ -22,7 +22,7 @@ pub async fn insert_ticker(ticker: &Ticker, connection: &Pool<Sqlite>) -> Result
             let asset = ticker.asset();
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO assets 
+                INSERT INTO assets 
                 (name, asset_type, isin, sector, industry) 
                 VALUES (?, ?, ?, ?, ?)
                 "#,
@@ -41,7 +41,7 @@ pub async fn insert_ticker(ticker: &Ticker, connection: &Pool<Sqlite>) -> Result
     let last_price = ticker.last_price().unwrap_or(Decimal::ZERO);
     let id = sqlx::query(
         r#"
-        INSERT OR IGNORE INTO tickers 
+        INSERT INTO tickers 
         (symbol, asset_id, currency, exchange, last_price, last_price_updated_at) 
         VALUES (?, ?, ?, ?, ?, ?)
         "#,
@@ -78,7 +78,7 @@ pub async fn insert_transaction(
 
     let id = sqlx::query(
         r#"
-        INSERT OR IGNORE INTO transactions
+        INSERT INTO transactions
         (
             transaction_no,
             date,

@@ -54,20 +54,41 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
         let price = format!("{:.2}", position.price());
         let market_value = format!("{:.2}", position.market_value());
         let cost_basis = format!("{:.2}", position.total_cost());
-        let realized_gain = format!("{:.2}", position.realized_gain());
         let dividends_collected = format!("{:.2}", position.dividends_collected());
-        let total_gain = format!("{:.2}", position.total_gain());
 
         let unrealized_gain = *position.unrealized_gain();
-        let gain_loss_color = if unrealized_gain >= Decimal::ZERO {
+        let realized_gain = *position.realized_gain();
+        let unrealized_gain_percent = *position.unrealized_gain_percent();
+        let total_gain = *position.total_gain();
+
+        let color_unrealized_gain = if unrealized_gain >= Decimal::ZERO {
             Color::Green
         } else {
             Color::Red
         };
-        let unrealized_gain_str = format!("{:.2}", unrealized_gain.abs());
 
-        let gain_loss_percent = *position.unrealized_gain_percent();
-        let gain_loss_percent_str = format!("{:.2}%", gain_loss_percent.abs());
+        let color_realized_gain = if realized_gain >= Decimal::ZERO {
+            Color::Green
+        } else {
+            Color::Red
+        };
+
+        let color_unrealized_gain_percent = if unrealized_gain_percent >= Decimal::ZERO {
+            Color::Green
+        } else {
+            Color::Red
+        };
+
+        let color_total_gain = if total_gain >= Decimal::ZERO {
+            Color::Green
+        } else {
+            Color::Red
+        };
+
+        let unrealized_gain_str = format!("{:.2}", unrealized_gain.abs());
+        let urealized_gain_percent_str = format!("{:.2}%", unrealized_gain_percent.abs());
+        let realized_gain_str = format!("{:.2}", realized_gain.abs());
+        let total_gain_str = format!("{:.2}", total_gain.abs());
 
         let cells = [
             Cell::from(name.to_string()),
@@ -76,11 +97,12 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
             Cell::from(price),
             Cell::from(market_value),
             Cell::from(cost_basis),
-            Cell::from(unrealized_gain_str).style(Style::default().fg(gain_loss_color)),
-            Cell::from(gain_loss_percent_str).style(Style::default().fg(gain_loss_color)),
-            Cell::from(realized_gain).style(Style::default().fg(gain_loss_color)),
-            Cell::from(dividends_collected).style(Style::default().fg(gain_loss_color)),
-            Cell::from(total_gain).style(Style::default().fg(gain_loss_color)),
+            Cell::from(unrealized_gain_str).style(Style::default().fg(color_unrealized_gain)),
+            Cell::from(urealized_gain_percent_str)
+                .style(Style::default().fg(color_unrealized_gain_percent)),
+            Cell::from(realized_gain_str).style(Style::default().fg(color_realized_gain)),
+            Cell::from(dividends_collected).style(Style::default().fg(Color::Green)),
+            Cell::from(total_gain_str).style(Style::default().fg(color_total_gain)),
         ];
 
         Row::new(cells).height(1)

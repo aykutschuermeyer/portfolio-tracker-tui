@@ -16,8 +16,6 @@ pub async fn get_quote(symbol: &str, client: &Client, api_key: &str) -> Result<A
         .get("Global Quote")
         .ok_or_else(|| anyhow::anyhow!("Failed to find 'Global Quote' in the response"))?;
 
-    println!("{:#?}", global_quote);
-
     parse_response_object::<AvGlobalQuoteDto>(
         global_quote.clone(),
         &format!("No results for symbol {}", symbol),

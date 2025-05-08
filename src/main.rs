@@ -8,7 +8,7 @@ use sqlx::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let database_url = shellexpand::tilde("~/.config/portfolio-tracker-tui/portfolio.db");
+    let database_url = shellexpand::tilde("~/.local/share/portfolio-tracker-tui/portfolio.db");
     let db_connect_options = SqliteConnectOptions::new()
         .filename(database_url.as_ref())
         .create_if_missing(true);
