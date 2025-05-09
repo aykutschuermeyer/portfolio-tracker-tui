@@ -32,11 +32,11 @@ pub async fn get_quote_history(
     client: &Client,
     api_key: &str,
 ) -> Result<Vec<FmpQuoteHistoryDto>> {
-    let endpoint = format!(
-        "historical-price-eod/light?symbol={}&from={}&to={}",
-        symbol, start_date, end_date
+    let params = format!(
+        "symbol={}&from={}&to={}&apikey={}",
+        symbol, start_date, end_date, api_key
     );
-    let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
+    let res = make_request(client, BASE_URL, "historical-price-eod/light", &params).await?;
     parse_response_array::<FmpQuoteHistoryDto>(
         res,
         &format!("No results for symbol {symbol} from {start_date} to {end_date}"),

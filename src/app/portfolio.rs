@@ -57,11 +57,13 @@ impl Portfolio {
             cte_realized_gains_dividends AS (
                 SELECT
                     ticker_id,
+                    broker,
                     SUM(realized_gains) as realized_gains,
                     SUM(dividends_collected) as dividends_collected
                 FROM
                     transactions
                 GROUP BY
+                    broker,
                     ticker_id
             ),
             cte_transactions_rn AS (
@@ -70,6 +72,8 @@ impl Portfolio {
                     ROW_NUMBER() OVER (PARTITION BY ticker_id, broker ORDER BY transaction_no DESC) AS rn
                 FROM
                     transactions
+                WHERE
+                    transaction_type IN ('Buy', 'Sell')
             ),
             cte_transactions AS (
                 SELECT
@@ -80,24 +84,28 @@ impl Portfolio {
                     rn = 1
             )
             SELECT
-                assets.name,
-                assets.asset_type,
-                assets.isin,
-                assets.sector,
-                assets.industry,
-                tickers.last_price,
-                cte_transactions.cumulative_units,
-                cte_transactions.cumulative_cost,
-                cte_realized_gains_dividends.realized_gains,
-                cte_realized_gains_dividends.dividends_collected
+                ast.name,
+                ast.asset_type,
+                ast.isin,
+                ast.sector,
+                ast.industry,
+                tcr.last_price,
+                tnx.cumulative_units,
+                tnx.cumulative_cost,
+                rld.realized_gains,
+                rld.dividends_collected
             FROM
-                tickers
+                cte_transactions tnx
             LEFT JOIN
-                assets ON tickers.asset_id = assets.id
+                cte_realized_gains_dividends rld 
+                ON tnx.ticker_id = rld.ticker_id 
+                AND tnx.broker = rld.broker
             LEFT JOIN
-                cte_realized_gains_dividends ON tickers.id = cte_realized_gains_dividends.ticker_id
+                tickers tcr 
+                ON tnx.ticker_id = tcr.id
             LEFT JOIN
-                cte_transactions ON cte_transactions.ticker_id = tickers.id
+                assets ast               
+                ON tcr.asset_id = ast.id 
             "#
         ).fetch_all(&self.connection).await?;
 
@@ -326,7 +334,7 @@ impl Portfolio {
                 Ok(quote) if !quote.is_empty() => *quote[0].price(),
                 _ => {
                     let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await?;
-                    Decimal::from_str(av_quote.price()).unwrap()
+                    Decimal::from_str(av_quote.price()).unwrap_or(Decimal::ZERO)
                 }
             };
 
