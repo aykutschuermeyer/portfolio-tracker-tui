@@ -28,7 +28,10 @@ pub async fn search_symbol(
     client: &Client,
     api_key: &str,
 ) -> Result<Vec<AvSymbolSearchDto>> {
-    let params = format!("function=GLOBAL_QUOTE&symbol={}&apikey={}", symbol, api_key);
+    let params = format!(
+        "function=SYMBOL_SEARCH&keywords={}&apikey={}",
+        symbol, api_key
+    );
     let res = make_request(client, BASE_URL, "query", &params).await?;
 
     let best_matches = res

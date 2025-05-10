@@ -20,8 +20,8 @@ pub async fn search_symbol(
 }
 
 pub async fn get_quote(symbol: &str, client: &Client, api_key: &str) -> Result<Vec<FmpQuoteDto>> {
-    let endpoint = format!("quote?symbol={}", symbol);
-    let res = make_request(client, BASE_URL, &endpoint, api_key).await?;
+    let params = format!("symbol={}&apikey={}", symbol, api_key);
+    let res = make_request(client, BASE_URL, "quote", &params).await?;
     parse_response_array::<FmpQuoteDto>(res, &format!("No Results for symbol {symbol}")).await
 }
 

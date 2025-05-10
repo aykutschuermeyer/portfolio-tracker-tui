@@ -250,9 +250,17 @@ impl Portfolio {
             let (ticker, ticker_id) = match existing_ticker {
                 Some(existing_ticker) => existing_ticker,
                 None => {
-                    let search_result =
-                        fmp::search_symbol(&symbol, &self.client, &self.api_key_fmp).await?;
-                    let ticker = search_result[0].to_ticker();
+                    let fmp_search_result =
+                        fmp::search_symbol(&symbol, &self.client, &self.api_key_fmp).await;
+                    let ticker = match fmp_search_result {
+                        Ok(result) => result[0].to_ticker(),
+                        Err(error) => {
+                            eprintln!("{}", error);
+                            let av_search_result =
+                                av::search_symbol(&symbol, &self.client, &self.api_key_av).await?;
+                            av_search_result[0].to_ticker()
+                        }
+                    };
                     let new_ticker_id = insert_ticker(&ticker, &self.connection).await?;
                     ticker_map.insert(symbol, (ticker.clone(), new_ticker_id));
                     &(ticker, new_ticker_id)
@@ -328,11 +336,11 @@ impl Portfolio {
 
         for row in tickers {
             let symbol = row.get::<&str, _>("symbol");
-            let quote_result = fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await;
-
-            let price = match quote_result {
-                Ok(quote) if !quote.is_empty() => *quote[0].price(),
-                _ => {
+            let fmp_quote_result = fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await;
+            let price = match fmp_quote_result {
+                Ok(result) => *result[0].price(),
+                Err(error) => {
+                    eprintln!("{}", error);
                     let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await?;
                     Decimal::from_str(av_quote.price()).unwrap_or(Decimal::ZERO)
                 }
