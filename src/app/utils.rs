@@ -4,7 +4,10 @@ use reqwest::Client;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
-use crate::api::fmp::get_quote_history;
+use crate::{
+    api::{av, fmp, frank},
+    models::Ticker,
+};
 
 pub fn parse_datetime(field: &str) -> Result<DateTime<Local>> {
     let date_str = format!("{} 00:00:00", field);
@@ -20,29 +23,38 @@ pub fn parse_decimal(field: &str, field_name: &str) -> Result<Decimal> {
         .with_context(|| format!("Failed to parse {} '{}'", field_name, field))
 }
 
+pub async fn find_ticker(
+    symbol: &str,
+    client: &Client,
+    api_key_fmp: &str,
+    api_key_av: &str,
+) -> Result<Ticker> {
+    let fmp_search_result = fmp::search_symbol(&symbol, &client, &api_key_fmp).await;
+    match fmp_search_result {
+        Ok(result) => Ok(result[0].to_ticker()),
+        Err(error) => {
+            eprintln!("{}", error);
+            let av_search_result = av::search_symbol(&symbol, &client, &api_key_av).await?;
+            Ok(av_search_result[0].to_ticker())
+        }
+    }
+}
+
 pub async fn get_exchange_rate(
     base_currency: &str,
     transaction_currency: &str,
     transaction_date: &DateTime<Local>,
     client: &Client,
-    api_key: &str,
 ) -> Result<Decimal> {
     if base_currency == transaction_currency {
         return Ok(dec!(1.0));
     }
-
-    let quote_result = get_quote_history(
-        &format!("{}{}", base_currency, transaction_currency),
-        &transaction_date.format("%Y-%m-%d").to_string(),
+    let quote_result = frank::get_forex_history(
+        transaction_currency,
+        base_currency,
         &transaction_date.format("%Y-%m-%d").to_string(),
         client,
-        api_key,
     )
     .await?;
-
-    if let Some(first_quote) = quote_result.first() {
-        Ok(dec!(1) / *first_quote.price())
-    } else {
-        Err(anyhow::anyhow!("No quote data available"))
-    }
+    Ok(quote_result.rates()[base_currency])
 }

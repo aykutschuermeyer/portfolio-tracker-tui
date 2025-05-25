@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rust_decimal::{prelude::ToPrimitive, Decimal};
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 use sqlx::{Pool, Row, Sqlite};
 
 use crate::models::{Ticker, Transaction};
@@ -78,7 +78,7 @@ pub async fn insert_transaction(
 
     let id = sqlx::query(
         r#"
-        INSERT INTO transactions
+        INSERT OR IGNORE INTO transactions
         (
             transaction_no,
             date,

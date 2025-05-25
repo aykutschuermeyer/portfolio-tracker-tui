@@ -6,8 +6,8 @@ use csv::Reader;
 use derive_getters::Getters;
 use reqwest::Client;
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
     Decimal,
+    prelude::{FromPrimitive, ToPrimitive},
 };
 use rust_decimal_macros::dec;
 use sqlx::{Pool, Row, Sqlite};
@@ -20,7 +20,7 @@ use crate::{
 
 use super::{
     calc::{calculate_position_state, calculate_transaction_gains},
-    utils::{get_exchange_rate, parse_datetime, parse_decimal},
+    utils::{find_ticker, get_exchange_rate, parse_datetime, parse_decimal},
 };
 
 #[derive(Clone, Debug, Getters)]
@@ -69,7 +69,8 @@ impl Portfolio {
             cte_transactions_rn AS (
                 SELECT 
                     transactions.*,
-                    ROW_NUMBER() OVER (PARTITION BY ticker_id, broker ORDER BY transaction_no DESC) AS rn
+                    ROW_NUMBER() OVER (PARTITION BY ticker_id, broker ORDER BY transaction_no DESC)
+                        AS rn
                 FROM
                     transactions
                 WHERE
@@ -90,6 +91,8 @@ impl Portfolio {
                 ast.sector,
                 ast.industry,
                 tcr.last_price,
+                tcr.currency,
+                tnx.exchange_rate,
                 tnx.cumulative_units,
                 tnx.cumulative_cost,
                 rld.realized_gains,
@@ -106,17 +109,33 @@ impl Portfolio {
             LEFT JOIN
                 assets ast               
                 ON tcr.asset_id = ast.id 
-            "#
-        ).fetch_all(&self.connection).await?;
+            "#,
+        )
+        .fetch_all(&self.connection)
+        .await?;
 
         let holdings: Vec<Holding> = tickers
             .iter()
             .map(|row| {
+                let asset = Asset::new(
+                    row.get::<String, _>("name"),
+                    AssetType::parse_str(&row.get::<String, _>("asset_type"))
+                        .unwrap_or(AssetType::Stock),
+                    row.get::<Option<String>, _>("isin"),
+                    row.get::<Option<String>, _>("sector"),
+                    row.get::<Option<String>, _>("industry"),
+                );
+
                 let quantity = Decimal::from_f64(row.get::<f64, _>("cumulative_units"))
                     .unwrap_or(Decimal::ZERO);
                 let price =
                     Decimal::from_f64(row.get::<f64, _>("last_price")).unwrap_or(Decimal::ZERO);
-                let market_value = (price * quantity).round();
+                let exchange_rate =
+                    Decimal::from_f64(row.get::<f64, _>("exchange_rate")).unwrap_or(dec!(1));
+
+                let adjusted_price = price * (dec!(1) / exchange_rate);
+
+                let market_value = (adjusted_price * quantity).round();
                 let total_cost = Decimal::from_f64(row.get::<f64, _>("cumulative_cost"))
                     .unwrap_or(Decimal::ZERO);
                 let cost_per_share = (total_cost / quantity).round_dp(4);
@@ -131,16 +150,9 @@ impl Portfolio {
                 let total_gain = unrealized_gain + realized_gain + dividends_collected;
 
                 Holding::new(
-                    Asset::new(
-                        row.get::<String, _>("name"),
-                        AssetType::parse_str(&row.get::<String, _>("asset_type"))
-                            .unwrap_or(AssetType::Stock),
-                        row.get::<Option<String>, _>("isin"),
-                        row.get::<Option<String>, _>("sector"),
-                        row.get::<Option<String>, _>("industry"),
-                    ),
+                    asset,
                     quantity,
-                    price,
+                    adjusted_price,
                     market_value,
                     total_cost,
                     cost_per_share,
@@ -240,9 +252,9 @@ impl Portfolio {
 
             let date = parse_datetime(&rec[1])?;
             let transaction_type = TransactionType::parse_str(&rec[2])?;
-            let symbol = rec[3].to_string();
+            let mut symbol = rec[3].to_string();
             let quantity = parse_decimal(&rec[4], "quantity")?;
-            let price = parse_decimal(&rec[5], "price")?;
+            let mut price = parse_decimal(&rec[5], "price")?;
             let fees = parse_decimal(&rec[6], "fees")?;
             let broker = rec[7].to_string();
 
@@ -250,10 +262,11 @@ impl Portfolio {
             let (ticker, ticker_id) = match existing_ticker {
                 Some(existing_ticker) => existing_ticker,
                 None => {
-                    let fmp_search_result =
-                        fmp::search_symbol(&symbol, &self.client, &self.api_key_fmp).await;
-                    let ticker = match fmp_search_result {
-                        Ok(result) => result[0].to_ticker(),
+                    let search_result =
+                        find_ticker(&symbol, &self.client, &self.api_key_fmp, &self.api_key_av)
+                            .await;
+                    let ticker = match search_result {
+                        Ok(result) => result,
                         Err(error) => {
                             eprintln!("{}", error);
                             let av_search_result =
@@ -273,14 +286,7 @@ impl Portfolio {
             let exchange_rate = match existing_forex {
                 Some(existing_forex) => existing_forex,
                 None => {
-                    &get_exchange_rate(
-                        &self.base_currency,
-                        currency,
-                        &date,
-                        &self.client,
-                        &self.api_key_fmp,
-                    )
-                    .await?
+                    &get_exchange_rate(currency, &self.base_currency, &date, &self.client).await?
                 }
             };
 
@@ -341,8 +347,12 @@ impl Portfolio {
                 Ok(result) => *result[0].price(),
                 Err(error) => {
                     eprintln!("{}", error);
-                    let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await?;
-                    Decimal::from_str(av_quote.price()).unwrap_or(Decimal::ZERO)
+                    let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await;
+                    if av_quote.is_err() {
+                        Decimal::ZERO
+                    } else {
+                        Decimal::from_str(av_quote?.price()).unwrap_or(Decimal::ZERO)
+                    }
                 }
             };
 

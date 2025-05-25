@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS tickers (
     symbol TEXT NOT NULL,
     asset_id INTEGER REFERENCES assets(id),
     currency TEXT NOT NULL,
-    exchange TEXT NOT NULL,
+    exchange TEXT,
     last_price REAL,
     last_price_updated_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
