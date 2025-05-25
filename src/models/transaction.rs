@@ -3,6 +3,7 @@ use chrono::{DateTime, Local};
 use derive_getters::Getters;
 use derive_new::new;
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 
 use super::{PositionState, Ticker, TransactionGains};
 
@@ -24,7 +25,7 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn get_amount(&self) -> Decimal {
-        let amount = self.price * self.exchange_rate * self.quantity + self.fees;
+        let amount = self.price * (dec!(1) / self.exchange_rate) * self.quantity + self.fees;
         if self.transaction_type == TransactionType::Buy {
             -amount
         } else {

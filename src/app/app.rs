@@ -2,7 +2,9 @@ use std::io;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -17,19 +19,26 @@ use crate::app::{Portfolio, ui};
 pub struct App {
     portfolio: Portfolio,
     table_state: TableState,
+    popup_message: Option<String>,
+    selection_mode: bool,
 }
 
 impl App {
     pub fn new(portfolio: Portfolio) -> Self {
-        let mut table_state = TableState::default();
-        if !portfolio.holdings().is_empty() {
-            table_state.select(Some(0));
-        }
-
         Self {
             portfolio,
-            table_state,
+            table_state: TableState::default(),
+            popup_message: None,
+            selection_mode: false,
         }
+    }
+
+    fn show_popup(&mut self, message: &str) {
+        self.popup_message = Some(message.to_string());
+    }
+
+    fn clear_popup(&mut self) {
+        self.popup_message = None;
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -54,7 +63,15 @@ impl App {
 
     async fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         loop {
-            terminal.draw(|frame| ui::render(frame, &self.portfolio, &mut self.table_state))?;
+            terminal.draw(|frame| {
+                ui::render(
+                    frame,
+                    &self.portfolio,
+                    &mut self.table_state,
+                    &self.popup_message,
+                    self.selection_mode,
+                )
+            })?;
 
             if let Event::Key(key) = event::read()? {
                 if key.kind != KeyEventKind::Press {
@@ -63,28 +80,88 @@ impl App {
 
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Esc => {
+                        self.selection_mode = false;
+                        self.table_state.select(None);
+                    }
                     KeyCode::F(4) => {
+                        self.selection_mode = false;
+                        self.table_state.select(None);
+                        self.show_popup("Importing transactions...");
+                        terminal.draw(|frame| {
+                            ui::render(
+                                frame,
+                                &self.portfolio,
+                                &mut self.table_state,
+                                &self.popup_message,
+                                self.selection_mode,
+                            )
+                        })?;
+
                         let csv_path =
                             shellexpand::tilde("~/.config/portfolio-tracker-tui/transactions.csv");
-                        if let Err(e) = self.portfolio.import_transactions(&csv_path).await {
+                        let import_result = self.portfolio.import_transactions(&csv_path).await;
+                        let update_result = self.portfolio.update_prices().await;
+                        let holdings_result = self.portfolio.set_holdings().await;
+
+                        self.clear_popup();
+                        terminal.draw(|frame| {
+                            ui::render(
+                                frame,
+                                &self.portfolio,
+                                &mut self.table_state,
+                                &self.popup_message,
+                                self.selection_mode,
+                            )
+                        })?;
+
+                        if let Err(e) = import_result {
                             eprintln!("Error importing transactions: {}", e);
                         }
-                        if let Err(e) = self.portfolio.update_prices().await {
+                        if let Err(e) = update_result {
                             eprintln!("Error updating prices: {}", e);
                         }
-                        if let Err(e) = self.portfolio.set_holdings().await {
+                        if let Err(e) = holdings_result {
                             eprintln!("Error updating holdings: {}", e);
                         }
                     }
                     KeyCode::F(5) => {
-                        if let Err(e) = self.portfolio.update_prices().await {
+                        self.selection_mode = false;
+                        self.table_state.select(None);
+                        self.show_popup("Updating prices...");
+                        terminal.draw(|frame| {
+                            ui::render(
+                                frame,
+                                &self.portfolio,
+                                &mut self.table_state,
+                                &self.popup_message,
+                                self.selection_mode,
+                            )
+                        })?;
+
+                        let update_result = self.portfolio.update_prices().await;
+                        let holdings_result = self.portfolio.set_holdings().await;
+
+                        self.clear_popup();
+                        terminal.draw(|frame| {
+                            ui::render(
+                                frame,
+                                &self.portfolio,
+                                &mut self.table_state,
+                                &self.popup_message,
+                                self.selection_mode,
+                            )
+                        })?;
+
+                        if let Err(e) = update_result {
                             eprintln!("Error updating prices: {}", e);
                         }
-                        if let Err(e) = self.portfolio.set_holdings().await {
+                        if let Err(e) = holdings_result {
                             eprintln!("Error updating holdings: {}", e);
                         }
                     }
                     KeyCode::Down => {
+                        self.selection_mode = true;
                         let holdings = self.portfolio.holdings();
                         if !holdings.is_empty() {
                             let i = match self.table_state.selected() {
@@ -101,6 +178,7 @@ impl App {
                         }
                     }
                     KeyCode::Up => {
+                        self.selection_mode = true;
                         let holdings = self.portfolio.holdings();
                         if !holdings.is_empty() {
                             let i = match self.table_state.selected() {

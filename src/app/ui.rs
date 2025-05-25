@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
 };
@@ -8,7 +8,33 @@ use rust_decimal::Decimal;
 
 use crate::app::portfolio::Portfolio;
 
-pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableState) {
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
+
+pub fn render(
+    frame: &mut Frame,
+    portfolio: &Portfolio,
+    table_state: &mut TableState,
+    popup_message: &Option<String>,
+    selection_mode: bool,
+) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -125,10 +151,13 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
             Constraint::Length(15),
         ];
 
-        let table = Table::new(rows, widths)
+        let mut table = Table::new(rows, widths)
             .header(header)
-            .block(Block::default().title("Positions").borders(Borders::ALL))
-            .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+            .block(Block::default().title("Positions").borders(Borders::ALL));
+
+        if selection_mode {
+            table = table.row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+        }
 
         frame.render_stateful_widget(table, chunks[1], table_state);
     }
@@ -137,4 +166,17 @@ pub fn render(frame: &mut Frame, portfolio: &Portfolio, table_state: &mut TableS
         .style(Style::default().fg(Color::Yellow))
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(footer, chunks[2]);
+
+    if let Some(message) = popup_message {
+        let area = centered_rect(50, 20, frame.area());
+        let popup = Paragraph::new(message.as_str())
+            .style(Style::default().fg(Color::White))
+            .block(
+                Block::default()
+                    .title("Processing")
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::Yellow)),
+            );
+        frame.render_widget(popup, area);
+    }
 }
