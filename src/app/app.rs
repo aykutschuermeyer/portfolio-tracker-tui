@@ -2,17 +2,17 @@ use std::io;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Terminal,
     backend::{Backend, CrosstermBackend},
     widgets::TableState,
-    Terminal,
 };
 
-use crate::app::{ui, Portfolio};
+use crate::app::{Portfolio, ui};
 
 pub struct App {
     portfolio: Portfolio,
@@ -32,14 +32,14 @@ impl App {
         }
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub async fn run(&mut self) -> Result<()> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        let result = self.run_app(&mut terminal);
+        let result = self.run_app(&mut terminal).await;
 
         disable_raw_mode()?;
         execute!(
@@ -52,13 +52,38 @@ impl App {
         result
     }
 
-    fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
+    async fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         loop {
             terminal.draw(|frame| ui::render(frame, &self.portfolio, &mut self.table_state))?;
 
             if let Event::Key(key) = event::read()? {
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
+
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
+                    KeyCode::F(4) => {
+                        let csv_path =
+                            shellexpand::tilde("~/.config/portfolio-tracker-tui/transactions.csv");
+                        if let Err(e) = self.portfolio.import_transactions(&csv_path).await {
+                            eprintln!("Error importing transactions: {}", e);
+                        }
+                        if let Err(e) = self.portfolio.update_prices().await {
+                            eprintln!("Error updating prices: {}", e);
+                        }
+                        if let Err(e) = self.portfolio.set_holdings().await {
+                            eprintln!("Error updating holdings: {}", e);
+                        }
+                    }
+                    KeyCode::F(5) => {
+                        if let Err(e) = self.portfolio.update_prices().await {
+                            eprintln!("Error updating prices: {}", e);
+                        }
+                        if let Err(e) = self.portfolio.set_holdings().await {
+                            eprintln!("Error updating holdings: {}", e);
+                        }
+                    }
                     KeyCode::Down => {
                         let holdings = self.portfolio.holdings();
                         if !holdings.is_empty() {

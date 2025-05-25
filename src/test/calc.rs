@@ -31,7 +31,7 @@ mod tests {
         let (amounts, quantities) = set_sample_data();
         let result = calculate_position_state(amounts, quantities).unwrap();
 
-        println!("Result: {:#?}", result);
+        // println!("Result: {:#?}", result);
 
         assert_eq!(result.cumulative_units().normalize(), dec!(80.0));
         assert_eq!(result.cumulative_cost().normalize(), dec!(7229.43));

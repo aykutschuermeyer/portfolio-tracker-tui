@@ -268,7 +268,7 @@ impl Portfolio {
                     let ticker = match search_result {
                         Ok(result) => result,
                         Err(error) => {
-                            eprintln!("{}", error);
+                            // eprintln!("{}", error);
                             let av_search_result =
                                 av::search_symbol(&symbol, &self.client, &self.api_key_av).await?;
                             av_search_result[0].to_ticker()
@@ -346,7 +346,7 @@ impl Portfolio {
             let price = match fmp_quote_result {
                 Ok(result) => *result[0].price(),
                 Err(error) => {
-                    eprintln!("{}", error);
+                    // eprintln!("{}", error);
                     let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await;
                     if av_quote.is_err() {
                         Decimal::ZERO
