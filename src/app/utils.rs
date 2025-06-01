@@ -30,13 +30,11 @@ pub async fn find_ticker(
     api_key_av: &str,
 ) -> Result<Ticker> {
     let fmp_search_result = fmp::search_symbol(&symbol, &client, &api_key_fmp).await;
-    match fmp_search_result {
-        Ok(result) => Ok(result[0].to_ticker()),
-        Err(error) => {
-            // eprintln!("{}", error);
-            let av_search_result = av::search_symbol(&symbol, &client, &api_key_av).await?;
-            Ok(av_search_result[0].to_ticker())
-        }
+    if fmp_search_result.is_err() {
+        let av_search_result = av::search_symbol(&symbol, &client, &api_key_av).await?;
+        return Ok(av_search_result[0].to_ticker());
+    } else {
+        return Ok(fmp_search_result.unwrap()[0].to_ticker());
     }
 }
 

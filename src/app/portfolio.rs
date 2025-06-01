@@ -252,11 +252,13 @@ impl Portfolio {
 
             let date = parse_datetime(&rec[1])?;
             let transaction_type = TransactionType::parse_str(&rec[2])?;
-            let mut symbol = rec[3].to_string();
+            let symbol = rec[3].to_string();
             let quantity = parse_decimal(&rec[4], "quantity")?;
             let mut price = parse_decimal(&rec[5], "price")?;
             let fees = parse_decimal(&rec[6], "fees")?;
             let broker = rec[7].to_string();
+            let alternative_symbol = rec[8].to_string();
+            let transaction_currency = rec[9].to_string();
 
             let existing_ticker = ticker_map.get(&symbol);
             let (ticker, ticker_id) = match existing_ticker {
@@ -267,11 +269,14 @@ impl Portfolio {
                             .await;
                     let ticker = match search_result {
                         Ok(result) => result,
-                        Err(error) => {
-                            // eprintln!("{}", error);
-                            let av_search_result =
-                                av::search_symbol(&symbol, &self.client, &self.api_key_av).await?;
-                            av_search_result[0].to_ticker()
+                        Err(_) => {
+                            find_ticker(
+                                &alternative_symbol,
+                                &self.client,
+                                &self.api_key_fmp,
+                                &self.api_key_av,
+                            )
+                            .await?
                         }
                     };
                     let new_ticker_id = insert_ticker(&ticker, &self.connection).await?;
@@ -281,6 +286,13 @@ impl Portfolio {
             };
 
             let currency = ticker.currency();
+
+            if &transaction_currency != currency {
+                let x_rate =
+                    get_exchange_rate(&currency, &transaction_currency, &date, &self.client)
+                        .await?;
+                price = price * x_rate;
+            }
 
             let existing_forex = forex_map.get(&transaction_no);
             let exchange_rate = match existing_forex {
@@ -345,7 +357,7 @@ impl Portfolio {
             let fmp_quote_result = fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await;
             let price = match fmp_quote_result {
                 Ok(result) => *result[0].price(),
-                Err(error) => {
+                Err(_error) => {
                     // eprintln!("{}", error);
                     let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await;
                     if av_quote.is_err() {
