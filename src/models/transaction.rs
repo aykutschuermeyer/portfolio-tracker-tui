@@ -25,11 +25,11 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn get_amount(&self) -> Decimal {
-        let amount = self.price * (dec!(1) / self.exchange_rate) * self.quantity + self.fees;
+        let amount = self.price * (dec!(1) / self.exchange_rate) * self.quantity;
         if self.transaction_type == TransactionType::Buy {
-            -amount
+            -amount - self.fees
         } else {
-            amount
+            amount - self.fees
         }
     }
 

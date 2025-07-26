@@ -109,6 +109,8 @@ impl Portfolio {
             LEFT JOIN
                 assets ast               
                 ON tcr.asset_id = ast.id 
+            WHERE
+                tnx.cumulative_units > 0
             "#,
         )
         .fetch_all(&self.connection)
@@ -128,6 +130,7 @@ impl Portfolio {
 
                 let quantity = Decimal::from_f64(row.get::<f64, _>("cumulative_units"))
                     .unwrap_or(Decimal::ZERO);
+
                 let price =
                     Decimal::from_f64(row.get::<f64, _>("last_price")).unwrap_or(Decimal::ZERO);
                 let exchange_rate =
@@ -246,11 +249,13 @@ impl Portfolio {
             let rec = record.with_context(|| format!("Failed to read CSV record {}", i + 1))?;
 
             let transaction_no = rec[0].parse::<i64>()?;
-            if transaction_no <= last_transaction_no {
+
+            let date = parse_datetime(&rec[1])?;
+
+            if last_transaction_no != 0 && (transaction_no <= last_transaction_no) {
                 continue;
             }
 
-            let date = parse_datetime(&rec[1])?;
             let transaction_type = TransactionType::parse_str(&rec[2])?;
             let symbol = rec[3].to_string();
             let quantity = parse_decimal(&rec[4], "quantity")?;
@@ -289,9 +294,8 @@ impl Portfolio {
 
             if &transaction_currency != currency {
                 let x_rate =
-                    get_exchange_rate(&currency, &transaction_currency, &date, &self.client)
-                        .await?;
-                price = price * x_rate;
+                    get_exchange_rate(currency, &transaction_currency, &date, &self.client).await?;
+                price *= x_rate;
             }
 
             let existing_forex = forex_map.get(&transaction_no);
