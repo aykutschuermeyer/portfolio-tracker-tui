@@ -1,11 +1,10 @@
 use anyhow::Result;
 use rust_decimal::{Decimal, prelude::ToPrimitive};
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Row, Sqlite};
 
 use crate::models::{Ticker, Transaction};
 
-pub async fn insert_ticker(ticker: &Ticker, connection: &Pool<Sqlite>) -> Result<i64> {
-    let mut tnx = connection.begin().await?;
+pub async fn insert_ticker(ticker: &Ticker, tx: &mut sqlx::Transaction<'_, Sqlite>) -> Result<i64> {
     let asset_id = sqlx::query(
         r#"
         SELECT id FROM assets
@@ -13,7 +12,7 @@ pub async fn insert_ticker(ticker: &Ticker, connection: &Pool<Sqlite>) -> Result
         "#,
     )
     .bind(ticker.asset().name())
-    .fetch_one(&mut *tnx)
+    .fetch_one(&mut **tx)
     .await;
 
     let asset_id = match asset_id {
@@ -32,7 +31,7 @@ pub async fn insert_ticker(ticker: &Ticker, connection: &Pool<Sqlite>) -> Result
             .bind(asset.isin())
             .bind(asset.sector())
             .bind(asset.industry())
-            .execute(&mut *tnx)
+            .execute(&mut **tx)
             .await?
             .last_insert_rowid()
         }
@@ -52,11 +51,9 @@ pub async fn insert_ticker(ticker: &Ticker, connection: &Pool<Sqlite>) -> Result
     .bind(ticker.exchange())
     .bind(last_price.round_dp(4).to_f64())
     .bind(ticker.last_price_updated_at())
-    .execute(&mut *tnx)
+    .execute(&mut **tx)
     .await?
     .last_insert_rowid();
-
-    tnx.commit().await?;
 
     Ok(id)
 }
@@ -64,7 +61,7 @@ pub async fn insert_ticker(ticker: &Ticker, connection: &Pool<Sqlite>) -> Result
 pub async fn insert_transaction(
     transaction: &Transaction,
     ticker_id: &i64,
-    connection: &Pool<Sqlite>,
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
 ) -> Result<i64> {
     let position_state = transaction
         .position_state()
@@ -114,7 +111,7 @@ pub async fn insert_transaction(
     .bind(position_state.cost_of_units_sold().round_dp(4).to_f64())
     .bind(transaction_gains.realized_gains().round_dp(4).to_f64())
     .bind(transaction_gains.dividends_collected().round_dp(4).to_f64())
-    .execute(connection)
+    .execute(&mut **tx)
     .await?
     .last_insert_rowid();
 

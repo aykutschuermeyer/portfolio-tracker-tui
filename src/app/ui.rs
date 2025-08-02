@@ -33,6 +33,7 @@ pub fn render(
     portfolio: &Portfolio,
     table_state: &mut TableState,
     popup_message: &Option<String>,
+    error_popup: &Option<String>,
     selection_mode: bool,
 ) {
     let chunks = Layout::default()
@@ -167,6 +168,7 @@ pub fn render(
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(footer, chunks[2]);
 
+    // Render loading popup
     if let Some(message) = popup_message {
         let area = centered_rect(50, 20, frame.area());
         let popup = Paragraph::new(message.as_str())
@@ -177,6 +179,23 @@ pub fn render(
                     .borders(Borders::ALL)
                     .style(Style::default().fg(Color::Yellow)),
             );
+        frame.render_widget(popup, area);
+    }
+
+    // Render error popup
+    if let Some(error_message) = error_popup {
+        let area = centered_rect(60, 25, frame.area());
+        let popup = Paragraph::new(format!(
+            "{}\n\nPress Enter or Esc to dismiss",
+            error_message
+        ))
+        .style(Style::default().fg(Color::White))
+        .block(
+            Block::default()
+                .title("Error")
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::Red)),
+        );
         frame.render_widget(popup, area);
     }
 }

@@ -13,7 +13,7 @@ pub async fn get_forex_history(
     client: &Client,
 ) -> Result<FrankForexDto> {
     let params = format!("from={}&to={}", from_currency, to_currency);
-    let res = make_request(client, "https://api.frankfurter.app", &date, &params).await?;
+    let res = make_request(client, "https://api.frankfurter.app", date, &params).await?;
     parse_response_object::<FrankForexDto>(
         res,
         &format!(

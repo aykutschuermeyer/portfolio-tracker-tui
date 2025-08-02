@@ -245,25 +245,73 @@ impl Portfolio {
 
         let last_transaction_no = self.get_last_transaction_no().await?;
 
+        // Start a database transaction for atomicity
+        let mut tx = self.connection.begin().await?;
+
         for (i, record) in reader.records().enumerate() {
             let rec = record.with_context(|| format!("Failed to read CSV record {}", i + 1))?;
 
-            let transaction_no = rec[0].parse::<i64>()?;
+            let transaction_no = rec
+                .get(0)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Missing transaction_no column in record {}", i + 1)
+                })?
+                .parse::<i64>()
+                .with_context(|| format!("Failed to parse transaction_no in record {}", i + 1))?;
 
-            let date = parse_datetime(&rec[1])?;
+            let date = parse_datetime(
+                rec.get(1)
+                    .ok_or_else(|| anyhow::anyhow!("Missing date column in record {}", i + 1))?,
+            )
+            .with_context(|| format!("Failed to parse date in record {}", i + 1))?;
 
             if last_transaction_no != 0 && (transaction_no <= last_transaction_no) {
                 continue;
             }
 
-            let transaction_type = TransactionType::parse_str(&rec[2])?;
-            let symbol = rec[3].to_string();
-            let quantity = parse_decimal(&rec[4], "quantity")?;
-            let mut price = parse_decimal(&rec[5], "price")?;
-            let fees = parse_decimal(&rec[6], "fees")?;
-            let broker = rec[7].to_string();
-            let alternative_symbol = rec[8].to_string();
-            let transaction_currency = rec[9].to_string();
+            let transaction_type = TransactionType::parse_str(rec.get(2).ok_or_else(|| {
+                anyhow::anyhow!("Missing transaction_type column in record {}", i + 1)
+            })?)
+            .with_context(|| format!("Failed to parse transaction_type in record {}", i + 1))?;
+            let symbol = rec
+                .get(3)
+                .ok_or_else(|| anyhow::anyhow!("Missing symbol column in record {}", i + 1))?
+                .to_string();
+            let quantity = parse_decimal(
+                rec.get(4).ok_or_else(|| {
+                    anyhow::anyhow!("Missing quantity column in record {}", i + 1)
+                })?,
+                "quantity",
+            )
+            .with_context(|| format!("Failed to parse quantity in record {}", i + 1))?;
+            let mut price = parse_decimal(
+                rec.get(5)
+                    .ok_or_else(|| anyhow::anyhow!("Missing price column in record {}", i + 1))?,
+                "price",
+            )
+            .with_context(|| format!("Failed to parse price in record {}", i + 1))?;
+            let fees = parse_decimal(
+                rec.get(6)
+                    .ok_or_else(|| anyhow::anyhow!("Missing fees column in record {}", i + 1))?,
+                "fees",
+            )
+            .with_context(|| format!("Failed to parse fees in record {}", i + 1))?;
+            let broker = rec
+                .get(7)
+                .ok_or_else(|| anyhow::anyhow!("Missing broker column in record {}", i + 1))?
+                .to_string();
+            let alternative_symbol = rec
+                .get(8)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Missing alternative_symbol column in record {}", i + 1)
+                })?
+                .to_string();
+            let transaction_currency = rec
+                .get(9)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Missing transaction_currency column in record {}", i + 1)
+                })?
+                .to_string();
 
             let existing_ticker = ticker_map.get(&symbol);
             let (ticker, ticker_id) = match existing_ticker {
@@ -284,7 +332,10 @@ impl Portfolio {
                             .await?
                         }
                     };
-                    let new_ticker_id = insert_ticker(&ticker, &self.connection).await?;
+                    let new_ticker_id =
+                        insert_ticker(&ticker, &mut tx).await.with_context(|| {
+                            format!("Failed to insert ticker {} in record {}", symbol, i + 1)
+                        })?;
                     ticker_map.insert(symbol, (ticker.clone(), new_ticker_id));
                     &(ticker, new_ticker_id)
                 }
@@ -294,16 +345,32 @@ impl Portfolio {
 
             if &transaction_currency != currency {
                 let x_rate =
-                    get_exchange_rate(currency, &transaction_currency, &date, &self.client).await?;
+                    get_exchange_rate(currency, &transaction_currency, &date, &self.client)
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "Failed to get exchange rate for {} to {} in record {}",
+                                currency,
+                                transaction_currency,
+                                i + 1
+                            )
+                        })?;
                 price *= x_rate;
             }
 
             let existing_forex = forex_map.get(&transaction_no);
             let exchange_rate = match existing_forex {
-                Some(existing_forex) => existing_forex,
-                None => {
-                    &get_exchange_rate(currency, &self.base_currency, &date, &self.client).await?
-                }
+                Some(existing_forex) => *existing_forex,
+                None => get_exchange_rate(currency, &self.base_currency, &date, &self.client)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "Failed to get exchange rate for {} to {} in record {}",
+                            currency,
+                            self.base_currency,
+                            i + 1
+                        )
+                    })?,
             };
 
             let mut transaction = Transaction::new(
@@ -313,7 +380,7 @@ impl Portfolio {
                 ticker.clone(),
                 broker.clone(),
                 currency.clone(),
-                *exchange_rate,
+                exchange_rate,
                 quantity,
                 price,
                 fees,
@@ -324,7 +391,6 @@ impl Portfolio {
             let (mut amounts, mut quantities): (Vec<Decimal>, Vec<Decimal>) = transactions
                 .iter()
                 .filter(|t| {
-                    // t.ticker().asset().name() == ticker.asset().name() && t.broker() == &broker
                     t.ticker().symbol() == ticker.symbol()
                         && (*t.transaction_type() == TransactionType::Buy
                             || *t.transaction_type() == TransactionType::Sell)
@@ -337,16 +403,26 @@ impl Portfolio {
             amounts.push(transaction.get_amount());
             quantities.push(transaction.get_quantity());
 
-            let position_state = calculate_position_state(amounts, quantities)?;
+            let position_state =
+                calculate_position_state(amounts, quantities).with_context(|| {
+                    format!("Failed to calculate position state in record {}", i + 1)
+                })?;
             let transaction_gains = calculate_transaction_gains(&transaction, &position_state);
 
             transaction.set_position_state(Some(position_state));
             transaction.set_transaction_gains(Some(transaction_gains));
 
-            let _ = insert_transaction(&transaction, ticker_id, &self.connection).await?;
+            insert_transaction(&transaction, ticker_id, &mut tx)
+                .await
+                .with_context(|| format!("Failed to insert transaction in record {}", i + 1))?;
 
             transactions.push(transaction);
         }
+
+        // Commit the transaction if all operations were successful
+        tx.commit()
+            .await
+            .with_context(|| "Failed to commit database transaction")?;
 
         Ok(())
     }
@@ -375,7 +451,7 @@ impl Portfolio {
             sqlx::query(
                 r#"
                 UPDATE tickers 
-                SET last_price = ?, last_price_updated_at = DATETIME('now') 
+                SET last_price = ?, last_price_updated_at = DATETIME('now'), updated_at = DATETIME('now')
                 WHERE symbol = ?
                 "#,
             )

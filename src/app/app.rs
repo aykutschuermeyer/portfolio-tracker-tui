@@ -18,6 +18,7 @@ pub struct App {
     portfolio: Portfolio,
     table_state: TableState,
     popup_message: Option<String>,
+    error_popup: Option<String>,
     selection_mode: bool,
 }
 
@@ -27,6 +28,7 @@ impl App {
             portfolio,
             table_state: TableState::default(),
             popup_message: None,
+            error_popup: None,
             selection_mode: false,
         }
     }
@@ -37,6 +39,14 @@ impl App {
 
     fn clear_popup(&mut self) {
         self.popup_message = None;
+    }
+
+    fn show_error_popup(&mut self, message: &str) {
+        self.error_popup = Some(message.to_string());
+    }
+
+    fn clear_error_popup(&mut self) {
+        self.error_popup = None;
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -67,6 +77,7 @@ impl App {
                     &self.portfolio,
                     &mut self.table_state,
                     &self.popup_message,
+                    &self.error_popup,
                     self.selection_mode,
                 )
             })?;
@@ -78,9 +89,15 @@ impl App {
 
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Esc => {
-                        self.selection_mode = false;
-                        self.table_state.select(None);
+                    KeyCode::Enter | KeyCode::Esc => {
+                        if self.error_popup.is_some() {
+                            self.clear_error_popup();
+                            continue;
+                        }
+                        if key.code == KeyCode::Esc {
+                            self.selection_mode = false;
+                            self.table_state.select(None);
+                        }
                     }
                     KeyCode::F(4) => {
                         self.selection_mode = false;
@@ -92,6 +109,7 @@ impl App {
                                 &self.portfolio,
                                 &mut self.table_state,
                                 &self.popup_message,
+                                &self.error_popup,
                                 self.selection_mode,
                             )
                         })?;
@@ -109,18 +127,17 @@ impl App {
                                 &self.portfolio,
                                 &mut self.table_state,
                                 &self.popup_message,
+                                &self.error_popup,
                                 self.selection_mode,
                             )
                         })?;
 
                         if let Err(e) = import_result {
-                            eprintln!("Error importing transactions: {}", e);
-                        }
-                        if let Err(e) = update_result {
-                            eprintln!("Error updating prices: {}", e);
-                        }
-                        if let Err(e) = holdings_result {
-                            eprintln!("Error updating holdings: {}", e);
+                            self.show_error_popup(&format!("Error importing transactions: {}", e));
+                        } else if let Err(e) = update_result {
+                            self.show_error_popup(&format!("Error updating prices: {}", e));
+                        } else if let Err(e) = holdings_result {
+                            self.show_error_popup(&format!("Error updating holdings: {}", e));
                         }
                     }
                     KeyCode::F(5) => {
@@ -133,6 +150,7 @@ impl App {
                                 &self.portfolio,
                                 &mut self.table_state,
                                 &self.popup_message,
+                                &self.error_popup,
                                 self.selection_mode,
                             )
                         })?;
@@ -147,15 +165,15 @@ impl App {
                                 &self.portfolio,
                                 &mut self.table_state,
                                 &self.popup_message,
+                                &self.error_popup,
                                 self.selection_mode,
                             )
                         })?;
 
                         if let Err(e) = update_result {
-                            eprintln!("Error updating prices: {}", e);
-                        }
-                        if let Err(e) = holdings_result {
-                            eprintln!("Error updating holdings: {}", e);
+                            self.show_error_popup(&format!("Error updating prices: {}", e));
+                        } else if let Err(e) = holdings_result {
+                            self.show_error_popup(&format!("Error updating holdings: {}", e));
                         }
                     }
                     KeyCode::Down => {

@@ -1,4 +1,4 @@
-use std::{env, path::Path};
+use std::{env, error::Error, path::Path};
 
 use portfolio_tracker_tui::app::{App, Portfolio};
 use sqlx::{
@@ -7,7 +7,7 @@ use sqlx::{
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn Error>> {
     let database_url = shellexpand::tilde("~/.local/share/portfolio-tracker-tui/portfolio.db");
     let db_connect_options = SqliteConnectOptions::new()
         .filename(database_url.as_ref())
