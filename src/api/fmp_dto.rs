@@ -3,7 +3,7 @@ use derive_new::new;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use crate::models::{Asset, AssetType, Ticker};
+use crate::models::{Asset, AssetType, Ticker, ticker::ApiProvider};
 
 #[derive(Debug, Deserialize, Getters, new)]
 #[serde(rename_all = "camelCase")]
@@ -55,6 +55,7 @@ impl FmpSearchSymbolDto {
             Some(self.exchange.clone()),
             None,
             None,
+            ApiProvider::Fmp,
         )
     }
 }

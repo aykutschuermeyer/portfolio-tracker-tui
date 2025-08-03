@@ -2,7 +2,7 @@ use derive_getters::Getters;
 use derive_new::new;
 use serde::Deserialize;
 
-use crate::models::{Asset, AssetType, Ticker};
+use crate::models::{Asset, AssetType, Ticker, ticker::ApiProvider};
 
 #[derive(Debug, Deserialize, Getters, new)]
 #[serde(rename_all = "camelCase")]
@@ -61,6 +61,7 @@ impl AvSymbolSearchDto {
             Some(String::from("")),
             None,
             None,
+            ApiProvider::Av,
         )
     }
 }

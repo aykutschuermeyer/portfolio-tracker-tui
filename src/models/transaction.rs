@@ -66,6 +66,7 @@ impl TransactionType {
             _ => Err(anyhow::anyhow!("Unknown transaction type")),
         }
     }
+
     pub fn to_str(&self) -> &str {
         match self {
             TransactionType::Buy => "Buy",

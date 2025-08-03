@@ -15,7 +15,9 @@ use sqlx::{Pool, Row, Sqlite};
 use crate::{
     api::{av, fmp},
     db::write::{insert_ticker, insert_transaction},
-    models::{Asset, AssetType, Holding, Ticker, Transaction, TransactionType},
+    models::{
+        Asset, AssetType, Holding, Ticker, Transaction, TransactionType, ticker::ApiProvider,
+    },
 };
 
 use super::{
@@ -201,6 +203,7 @@ impl Portfolio {
                 row.get("exchange"),
                 Decimal::from_f64(row.get::<f64, _>("last_price")),
                 row.get::<Option<DateTime<Local>>, _>("last_price_updated_at"),
+                ApiProvider::parse_str(row.get::<&str, _>("last_api"))?,
             );
             ticker_map.insert(symbol, (ticker, ticker_id));
         }
@@ -332,10 +335,7 @@ impl Portfolio {
                             .await?
                         }
                     };
-                    let new_ticker_id =
-                        insert_ticker(&ticker, &mut tx).await.with_context(|| {
-                            format!("Failed to insert ticker {} in record {}", symbol, i + 1)
-                        })?;
+                    let new_ticker_id = insert_ticker(&ticker, &mut tx).await?;
                     ticker_map.insert(symbol, (ticker.clone(), new_ticker_id));
                     &(ticker, new_ticker_id)
                 }
@@ -419,7 +419,6 @@ impl Portfolio {
             transactions.push(transaction);
         }
 
-        // Commit the transaction if all operations were successful
         tx.commit()
             .await
             .with_context(|| "Failed to commit database transaction")?;
@@ -428,34 +427,54 @@ impl Portfolio {
     }
 
     pub async fn update_prices(&self) -> Result<()> {
-        let tickers = sqlx::query("SELECT symbol FROM tickers")
+        let tickers = sqlx::query("SELECT symbol, last_api FROM tickers")
             .fetch_all(&self.connection)
             .await?;
 
         for row in tickers {
             let symbol = row.get::<&str, _>("symbol");
-            let fmp_quote_result = fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await;
-            let price = match fmp_quote_result {
-                Ok(result) => *result[0].price(),
-                Err(_error) => {
-                    // eprintln!("{}", error);
-                    let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await;
-                    if av_quote.is_err() {
-                        Decimal::ZERO
-                    } else {
-                        Decimal::from_str(av_quote?.price()).unwrap_or(Decimal::ZERO)
+            let api = ApiProvider::parse_str(row.get::<&str, _>("last_api"))?;
+
+            let price: std::result::Result<Decimal, _>;
+            let mut new_api = api.clone();
+
+            if api == ApiProvider::Fmp {
+                let fmp_quote_result =
+                    fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await;
+                price = match fmp_quote_result {
+                    Ok(result) => Ok(*result[0].price()),
+                    Err(_error) => {
+                        let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await;
+                        new_api = ApiProvider::Av;
+                        Decimal::from_str(av_quote?.price())
                     }
-                }
-            };
+                };
+            } else {
+                let av_quote_result = av::get_quote(symbol, &self.client, &self.api_key_fmp).await;
+                price = match av_quote_result {
+                    Ok(result) => Decimal::from_str(result.price()),
+                    Err(_error) => {
+                        let fmp_quote =
+                            fmp::get_quote(symbol, &self.client, &self.api_key_av).await;
+                        new_api = ApiProvider::Fmp;
+                        Ok(*fmp_quote?[0].price())
+                    }
+                };
+            }
 
             sqlx::query(
                 r#"
                 UPDATE tickers 
-                SET last_price = ?, last_price_updated_at = DATETIME('now'), updated_at = DATETIME('now')
+                SET 
+                    last_price = ?, 
+                    last_price_updated_at = DATETIME('now'), 
+                    last_api = ?,
+                    updated_at = DATETIME('now')
                 WHERE symbol = ?
                 "#,
             )
-            .bind(price.to_f64())
+            .bind(price?.to_f64())
+            .bind(new_api.to_str())
             .bind(symbol)
             .execute(&self.connection)
             .await?;

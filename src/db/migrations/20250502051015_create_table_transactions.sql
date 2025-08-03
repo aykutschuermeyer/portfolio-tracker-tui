@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     transaction_no INTEGER NOT NULL,
-    date DATETIME NOT NULL,
+    transaction_date DATETIME NOT NULL,
     transaction_type TEXT NOT NULL,
     ticker_id INTEGER REFERENCES tickers(id),
     broker TEXT NOT NULL,

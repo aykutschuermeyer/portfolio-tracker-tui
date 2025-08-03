@@ -41,8 +41,8 @@ pub async fn insert_ticker(ticker: &Ticker, tx: &mut sqlx::Transaction<'_, Sqlit
     let id = sqlx::query(
         r#"
         INSERT INTO tickers 
-        (symbol, asset_id, currency, exchange, last_price, last_price_updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?)
+        (symbol, asset_id, currency, exchange, last_price, last_price_updated_at, last_api) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(ticker.symbol())
@@ -51,6 +51,7 @@ pub async fn insert_ticker(ticker: &Ticker, tx: &mut sqlx::Transaction<'_, Sqlit
     .bind(ticker.exchange())
     .bind(last_price.round_dp(4).to_f64())
     .bind(ticker.last_price_updated_at())
+    .bind(ticker.last_api().to_str())
     .execute(&mut **tx)
     .await?
     .last_insert_rowid();
@@ -78,7 +79,7 @@ pub async fn insert_transaction(
         INSERT OR IGNORE INTO transactions
         (
             transaction_no,
-            date,
+            transaction_date,
             transaction_type,
             ticker_id,
             broker,
