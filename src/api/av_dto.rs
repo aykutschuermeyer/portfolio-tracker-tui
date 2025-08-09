@@ -2,7 +2,7 @@ use derive_getters::Getters;
 use derive_new::new;
 use serde::Deserialize;
 
-use crate::models::{Asset, AssetType, Ticker, ticker::ApiProvider};
+use crate::models::{Ticker, ticker::ApiProvider};
 
 #[derive(Debug, Deserialize, Getters, new)]
 #[serde(rename_all = "camelCase")]
@@ -56,7 +56,7 @@ impl AvSymbolSearchDto {
     pub fn to_ticker(&self) -> Ticker {
         Ticker::new(
             self.symbol.clone(),
-            Asset::new(self.name.clone(), AssetType::Stock, None, None, None),
+            self.name.clone(),
             self.currency.clone(),
             Some(String::from("")),
             None,

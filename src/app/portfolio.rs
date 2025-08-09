@@ -125,6 +125,7 @@ impl Portfolio {
                     row.get::<String, _>("name"),
                     AssetType::parse_str(&row.get::<String, _>("asset_type"))
                         .unwrap_or(AssetType::Stock),
+                    Vec::new(),
                     row.get::<Option<String>, _>("isin"),
                     row.get::<Option<String>, _>("sector"),
                     row.get::<Option<String>, _>("industry"),
@@ -180,7 +181,6 @@ impl Portfolio {
         let tickers = sqlx::query(
             r#"
             SELECT * FROM tickers
-            LEFT JOIN assets ON tickers.asset_id = assets.id
             "#,
         )
         .fetch_all(&self.connection)
@@ -192,13 +192,7 @@ impl Portfolio {
             let ticker_id = row.get::<i64, _>("id");
             let ticker = Ticker::new(
                 symbol.clone(),
-                Asset::new(
-                    row.get::<String, _>("name"),
-                    AssetType::parse_str(row.get::<&str, _>("asset_type"))?,
-                    row.get::<Option<String>, _>("isin"),
-                    row.get::<Option<String>, _>("sector"),
-                    row.get::<Option<String>, _>("industry"),
-                ),
+                row.get::<String, _>("name"),
                 row.get::<String, _>("currency"),
                 row.get("exchange"),
                 Decimal::from_f64(row.get::<f64, _>("last_price")),
@@ -335,7 +329,15 @@ impl Portfolio {
                             .await?
                         }
                     };
-                    let new_ticker_id = insert_ticker(&ticker, &mut tx).await?;
+                    let asset = Asset::new(
+                        ticker.name().to_string(),
+                        AssetType::Stock,
+                        Vec::new(),
+                        None,
+                        None,
+                        None,
+                    );
+                    let new_ticker_id = insert_ticker(&ticker, &asset, &mut tx).await?;
                     ticker_map.insert(symbol, (ticker.clone(), new_ticker_id));
                     &(ticker, new_ticker_id)
                 }

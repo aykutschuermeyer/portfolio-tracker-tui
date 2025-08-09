@@ -2,23 +2,22 @@ use anyhow::Result;
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use sqlx::{Row, Sqlite};
 
-use crate::models::{Ticker, Transaction};
+use crate::models::{Asset, Ticker, Transaction};
 
-pub async fn insert_ticker(ticker: &Ticker, tx: &mut sqlx::Transaction<'_, Sqlite>) -> Result<i64> {
+pub async fn insert_ticker(ticker: &Ticker, asset: &Asset, tx: &mut sqlx::Transaction<'_, Sqlite>) -> Result<i64> {
     let asset_id = sqlx::query(
         r#"
         SELECT id FROM assets
         WHERE name = ?
         "#,
     )
-    .bind(ticker.asset().name())
+    .bind(asset.name())
     .fetch_one(&mut **tx)
     .await;
 
     let asset_id = match asset_id {
         Ok(row) => row.get::<i64, _>("id"),
         Err(_) => {
-            let asset = ticker.asset();
             sqlx::query(
                 r#"
                 INSERT INTO assets 
