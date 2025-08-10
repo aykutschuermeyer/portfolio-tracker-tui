@@ -1529,6 +1529,7 @@ dependencies = [
  "serde_json",
  "shellexpand",
  "sqlx",
+ "tempfile",
  "tokio",
  "tokio-stream",
 ]

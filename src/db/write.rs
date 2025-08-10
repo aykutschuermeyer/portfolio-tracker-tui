@@ -4,7 +4,11 @@ use sqlx::{Row, Sqlite};
 
 use crate::models::{Asset, Ticker, Transaction};
 
-pub async fn insert_ticker(ticker: &Ticker, asset: &Asset, tx: &mut sqlx::Transaction<'_, Sqlite>) -> Result<i64> {
+pub async fn insert_ticker(
+    ticker: &Ticker,
+    asset: &Asset,
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+) -> Result<i64> {
     let asset_id = sqlx::query(
         r#"
         SELECT id FROM assets
@@ -17,23 +21,21 @@ pub async fn insert_ticker(ticker: &Ticker, asset: &Asset, tx: &mut sqlx::Transa
 
     let asset_id = match asset_id {
         Ok(row) => row.get::<i64, _>("id"),
-        Err(_) => {
-            sqlx::query(
-                r#"
-                INSERT INTO assets 
-                (name, asset_type, isin, sector, industry) 
-                VALUES (?, ?, ?, ?, ?)
-                "#,
-            )
-            .bind(asset.name())
-            .bind(asset.asset_type().to_str())
-            .bind(asset.isin())
-            .bind(asset.sector())
-            .bind(asset.industry())
-            .execute(&mut **tx)
-            .await?
-            .last_insert_rowid()
-        }
+        Err(_) => sqlx::query(
+            r#"
+            INSERT INTO assets 
+            (name, asset_type, isin, sector, industry) 
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(asset.name())
+        .bind(asset.asset_type().to_str())
+        .bind(asset.isin())
+        .bind(asset.sector())
+        .bind(asset.industry())
+        .execute(&mut **tx)
+        .await?
+        .last_insert_rowid(),
     };
 
     let last_price = ticker.last_price().unwrap_or(Decimal::ZERO);

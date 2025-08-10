@@ -118,58 +118,101 @@ impl Portfolio {
         .fetch_all(&self.connection)
         .await?;
 
-        let holdings: Vec<Holding> = tickers
-            .iter()
-            .map(|row| {
-                let asset = Asset::new(
-                    row.get::<String, _>("name"),
-                    AssetType::parse_str(&row.get::<String, _>("asset_type"))
-                        .unwrap_or(AssetType::Stock),
-                    Vec::new(),
-                    row.get::<Option<String>, _>("isin"),
-                    row.get::<Option<String>, _>("sector"),
-                    row.get::<Option<String>, _>("industry"),
-                );
+        let mut holdings: Vec<Holding> = Vec::new();
 
-                let quantity = Decimal::from_f64(row.get::<f64, _>("cumulative_units"))
-                    .unwrap_or(Decimal::ZERO);
+        let missing_msg = |col: &str| format!("Missing '{}' column in holdings query", col);
 
-                let price =
-                    Decimal::from_f64(row.get::<f64, _>("last_price")).unwrap_or(Decimal::ZERO);
-                let exchange_rate =
-                    Decimal::from_f64(row.get::<f64, _>("exchange_rate")).unwrap_or(dec!(1));
+        for row in tickers.iter() {
+            let name = row
+                .try_get::<String, _>("name")
+                .with_context(|| missing_msg("name"))?;
+            let asset_type_str = row
+                .try_get::<String, _>("asset_type")
+                .with_context(|| missing_msg("asset_type"))?;
+            let isin = row
+                .try_get::<Option<String>, _>("isin")
+                .with_context(|| missing_msg("isin"))?;
+            let sector = row
+                .try_get::<Option<String>, _>("sector")
+                .with_context(|| missing_msg("sector"))?;
+            let industry = row
+                .try_get::<Option<String>, _>("industry")
+                .with_context(|| missing_msg("industry"))?;
 
-                let adjusted_price = price * (dec!(1) / exchange_rate);
+            let asset = Asset::new(
+                name,
+                AssetType::parse_str(&asset_type_str).unwrap_or(AssetType::Stock),
+                Vec::new(),
+                isin,
+                sector,
+                industry,
+            );
 
-                let market_value = (adjusted_price * quantity).round();
-                let total_cost = Decimal::from_f64(row.get::<f64, _>("cumulative_cost"))
-                    .unwrap_or(Decimal::ZERO);
-                let cost_per_share = (total_cost / quantity).round_dp(4);
-                let unrealized_gain = market_value - total_cost;
-                let unrealized_gain_percent =
-                    ((unrealized_gain / total_cost) * dec!(100)).round_dp(2);
-                let realized_gain =
-                    Decimal::from_f64(row.get::<f64, _>("realized_gains")).unwrap_or(Decimal::ZERO);
-                let dividends_collected =
-                    Decimal::from_f64(row.get::<f64, _>("dividends_collected"))
-                        .unwrap_or(Decimal::ZERO);
-                let total_gain = unrealized_gain + realized_gain + dividends_collected;
+            let cumulative_units_f64 = row
+                .try_get::<f64, _>("cumulative_units")
+                .with_context(|| missing_msg("cumulative_units"))?;
+            let quantity = Decimal::from_f64(cumulative_units_f64).unwrap_or(Decimal::ZERO);
 
-                Holding::new(
-                    asset,
-                    quantity,
-                    adjusted_price,
-                    market_value,
-                    total_cost,
-                    cost_per_share,
-                    unrealized_gain,
-                    unrealized_gain_percent,
-                    realized_gain,
-                    dividends_collected,
-                    total_gain,
-                )
-            })
-            .collect();
+            let last_price_f64 = row
+                .try_get::<f64, _>("last_price")
+                .with_context(|| missing_msg("last_price"))?;
+            let price = Decimal::from_f64(last_price_f64).unwrap_or(Decimal::ZERO);
+
+            let exchange_rate_f64 = row
+                .try_get::<f64, _>("exchange_rate")
+                .with_context(|| missing_msg("exchange_rate"))?;
+            let exchange_rate = Decimal::from_f64(exchange_rate_f64).unwrap_or(dec!(1));
+
+            let cumulative_cost_f64 = row
+                .try_get::<f64, _>("cumulative_cost")
+                .with_context(|| missing_msg("cumulative_cost"))?;
+            let total_cost = Decimal::from_f64(cumulative_cost_f64).unwrap_or(Decimal::ZERO);
+
+            let cost_per_share = if quantity != Decimal::ZERO {
+                (total_cost / quantity).round_dp(4)
+            } else {
+                Decimal::ZERO
+            };
+
+            let adjusted_price = price * (dec!(1) / exchange_rate);
+            let market_value = (adjusted_price * quantity).round();
+
+            let unrealized_gain = market_value - total_cost;
+            let unrealized_gain_percent = if total_cost != Decimal::ZERO {
+                ((unrealized_gain / total_cost) * dec!(100)).round_dp(2)
+            } else {
+                Decimal::ZERO
+            };
+
+            let realized_gains_f64 = row
+                .try_get::<f64, _>("realized_gains")
+                .with_context(|| missing_msg("realized_gains"))?;
+            let realized_gain = Decimal::from_f64(realized_gains_f64).unwrap_or(Decimal::ZERO);
+
+            let dividends_collected_f64 = row
+                .try_get::<f64, _>("dividends_collected")
+                .with_context(|| missing_msg("dividends_collected"))?;
+            let dividends_collected =
+                Decimal::from_f64(dividends_collected_f64).unwrap_or(Decimal::ZERO);
+
+            let total_gain = unrealized_gain + realized_gain + dividends_collected;
+
+            let holding = Holding::new(
+                asset,
+                quantity,
+                adjusted_price,
+                market_value,
+                total_cost,
+                cost_per_share,
+                unrealized_gain,
+                unrealized_gain_percent,
+                realized_gain,
+                dividends_collected,
+                total_gain,
+            );
+
+            holdings.push(holding);
+        }
 
         self.holdings.clear();
         self.holdings = holdings;
@@ -181,23 +224,49 @@ impl Portfolio {
         let tickers = sqlx::query(
             r#"
             SELECT * FROM tickers
+            LEFT JOIN assets on tickers.asset_id = assets.id
             "#,
         )
         .fetch_all(&self.connection)
         .await?;
 
+        let missing_msg = |col: &str| format!("Missing '{}' column in tickers query", col);
+
         let mut ticker_map: HashMap<String, (Ticker, i64)> = HashMap::new();
         for row in tickers {
-            let symbol: String = row.get::<String, _>("symbol");
-            let ticker_id = row.get::<i64, _>("id");
+            let symbol: String = row
+                .try_get::<String, _>("symbol")
+                .with_context(|| missing_msg("symbol"))?;
+            let ticker_id = row
+                .try_get::<i64, _>("id")
+                .with_context(|| missing_msg("id"))?;
+            let name = row
+                .try_get::<String, _>("name")
+                .with_context(|| missing_msg("name"))?;
+            let currency = row
+                .try_get::<String, _>("currency")
+                .with_context(|| missing_msg("currency"))?;
+            let exchange = row
+                .try_get("exchange")
+                .with_context(|| missing_msg("exchange"))?;
+            let last_price_f64 = row
+                .try_get::<f64, _>("last_price")
+                .with_context(|| missing_msg("last_price"))?;
+            let last_price_updated_at = row
+                .try_get::<Option<DateTime<Local>>, _>("last_price_updated_at")
+                .with_context(|| missing_msg("last_price_updated_at"))?;
+            let last_api_str = row
+                .try_get::<&str, _>("last_api")
+                .with_context(|| missing_msg("last_api"))?;
+
             let ticker = Ticker::new(
                 symbol.clone(),
-                row.get::<String, _>("name"),
-                row.get::<String, _>("currency"),
-                row.get("exchange"),
-                Decimal::from_f64(row.get::<f64, _>("last_price")),
-                row.get::<Option<DateTime<Local>>, _>("last_price_updated_at"),
-                ApiProvider::parse_str(row.get::<&str, _>("last_api"))?,
+                name,
+                currency,
+                exchange,
+                Decimal::from_f64(last_price_f64),
+                last_price_updated_at,
+                ApiProvider::parse_str(last_api_str)?,
             );
             ticker_map.insert(symbol, (ticker, ticker_id));
         }
@@ -211,11 +280,17 @@ impl Portfolio {
                 .fetch_all(&self.connection)
                 .await?;
 
+        let missing_msg = |col: &str| format!("Missing '{}' column in transactions query", col);
+
         let mut forex_map: HashMap<i64, Decimal> = HashMap::new();
         for row in transaction_forex {
-            let txn_no = row.get::<i64, _>("transaction_no");
-            let x_rate =
-                Decimal::from_f64(row.get::<f64, _>("exchange_rate")).unwrap_or(Decimal::ZERO);
+            let txn_no = row
+                .try_get::<i64, _>("transaction_no")
+                .with_context(|| missing_msg("transaction_no"))?;
+            let exchange_rate_f64 = row
+                .try_get::<f64, _>("exchange_rate")
+                .with_context(|| missing_msg("exchange_rate"))?;
+            let x_rate = Decimal::from_f64(exchange_rate_f64).unwrap_or(Decimal::ZERO);
             forex_map.insert(txn_no, x_rate);
         }
 
@@ -235,6 +310,18 @@ impl Portfolio {
         let mut reader = Reader::from_path(path)
             .with_context(|| format!("Failed to open CSV file at path: {}", path))?;
 
+        // Validate that CSV has headers
+        let headers = reader
+            .headers()
+            .with_context(|| format!("Failed to read CSV headers from file: {}", path))?;
+
+        if headers.len() < 10 {
+            return Err(anyhow::anyhow!(
+                "Invalid CSV format: expected at least 10 columns, found {}",
+                headers.len()
+            ));
+        }
+
         let mut transactions: Vec<Transaction> = Vec::new();
 
         let mut ticker_map = self.get_existing_tickers().await?;
@@ -242,7 +329,6 @@ impl Portfolio {
 
         let last_transaction_no = self.get_last_transaction_no().await?;
 
-        // Start a database transaction for atomicity
         let mut tx = self.connection.begin().await?;
 
         for (i, record) in reader.records().enumerate() {
@@ -319,14 +405,23 @@ impl Portfolio {
                             .await;
                     let ticker = match search_result {
                         Ok(result) => result,
-                        Err(_) => {
-                            find_ticker(
+                        Err(primary_error) => {
+                            match find_ticker(
                                 &alternative_symbol,
                                 &self.client,
                                 &self.api_key_fmp,
                                 &self.api_key_av,
                             )
-                            .await?
+                            .await
+                            {
+                                Ok(result) => result,
+                                Err(alternative_error) => {
+                                    return Err(anyhow::anyhow!(
+                                        "Failed to find ticker for symbol '{}'",
+                                        symbol,
+                                    ));
+                                }
+                            }
                         }
                     };
                     let asset = Asset::new(
@@ -433,9 +528,16 @@ impl Portfolio {
             .fetch_all(&self.connection)
             .await?;
 
+        let missing_msg = |col: &str| format!("Missing '{}' column in tickers query", col);
+
         for row in tickers {
-            let symbol = row.get::<&str, _>("symbol");
-            let api = ApiProvider::parse_str(row.get::<&str, _>("last_api"))?;
+            let symbol = row
+                .try_get::<&str, _>("symbol")
+                .with_context(|| missing_msg("symbol"))?;
+            let last_api_str = row
+                .try_get::<&str, _>("last_api")
+                .with_context(|| missing_msg("last_api"))?;
+            let api = ApiProvider::parse_str(last_api_str)?;
 
             let price: std::result::Result<Decimal, _>;
             let mut new_api = api.clone();
@@ -444,7 +546,15 @@ impl Portfolio {
                 let fmp_quote_result =
                     fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await;
                 price = match fmp_quote_result {
-                    Ok(result) => Ok(*result[0].price()),
+                    Ok(result) => {
+                        if result.is_empty() {
+                            return Err(anyhow::anyhow!(
+                                "No price data found for symbol '{}' from FMP",
+                                symbol
+                            ));
+                        }
+                        Ok(*result[0].price())
+                    }
                     Err(_error) => {
                         let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await;
                         new_api = ApiProvider::Av;
@@ -457,9 +567,15 @@ impl Portfolio {
                     Ok(result) => Decimal::from_str(result.price()),
                     Err(_error) => {
                         let fmp_quote =
-                            fmp::get_quote(symbol, &self.client, &self.api_key_av).await;
+                            fmp::get_quote(symbol, &self.client, &self.api_key_av).await?;
+                        if fmp_quote.is_empty() {
+                            return Err(anyhow::anyhow!(
+                                "No price data found for symbol '{}' from FMP fallback",
+                                symbol
+                            ));
+                        }
                         new_api = ApiProvider::Fmp;
-                        Ok(*fmp_quote?[0].price())
+                        Ok(*fmp_quote[0].price())
                     }
                 };
             }

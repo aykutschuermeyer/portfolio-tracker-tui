@@ -9,6 +9,23 @@ pub fn calculate_position_state(
     amounts: Vec<Decimal>,
     quantities: Vec<Decimal>,
 ) -> Result<PositionState> {
+    if amounts.len() != quantities.len() {
+        return Err(anyhow::anyhow!(
+            concat!(
+                "Cannot calculate position state: ",
+                "amounts and quantities have different lengths ({} vs {})"
+            ),
+            amounts.len(),
+            quantities.len()
+        ));
+    }
+
+    if amounts.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Cannot calculate position state: empty amounts and quantities vectors"
+        ));
+    }
+
     let mut queue = VecDeque::new();
     let mut cost_of_units_sold = Decimal::ZERO;
     let mut cumulative_units = Decimal::ZERO;
@@ -17,6 +34,14 @@ pub fn calculate_position_state(
         cost_of_units_sold = Decimal::ZERO;
         let amount = amounts[i];
         let quantity = quantities[i];
+
+        if quantity == Decimal::ZERO {
+            return Err(anyhow::anyhow!(
+                "Cannot calculate position state: quantity is zero at index {}",
+                i
+            ));
+        }
+
         let unit_cost = amount / quantity;
         cumulative_units += quantity;
 
@@ -34,6 +59,12 @@ pub fn calculate_position_state(
 
         if amount > Decimal::ZERO {
             for _ in 0..quantity_abs {
+                if queue.is_empty() {
+                    return Err(anyhow::anyhow!(concat!(
+                        "Cannot calculate position_state: ",
+                        "trying to sell more units than available in queue"
+                    )));
+                }
                 cost_of_units_sold += queue[0];
                 queue.pop_front();
             }
