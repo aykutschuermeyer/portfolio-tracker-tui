@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::models::{PositionState, Transaction, TransactionGains, TransactionType};
@@ -49,7 +49,7 @@ pub fn calculate_position_state(
             .abs()
             .floor()
             .to_i64()
-            .ok_or_else(|| anyhow::anyhow!("Failed to convert quantity to i64"))?;
+            .with_context(|| "Failed to convert quantity to i64")?;
 
         if amount < Decimal::ZERO {
             for _ in 0..quantity_abs {

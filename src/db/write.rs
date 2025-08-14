@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use sqlx::{Row, Sqlite};
 
@@ -68,12 +68,12 @@ pub async fn insert_transaction(
     let position_state = transaction
         .position_state()
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Missing position state"))?;
+        .with_context(|| "Missing position state")?;
 
     let transaction_gains = transaction
         .transaction_gains()
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Missing transaction gains"))?;
+        .with_context(|| "Missing transaction gains")?;
 
     let id = sqlx::query(
         r#"

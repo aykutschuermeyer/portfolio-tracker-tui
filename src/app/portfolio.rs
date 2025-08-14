@@ -101,14 +101,14 @@ impl Portfolio {
                 rld.dividends_collected
             FROM
                 cte_transactions tnx
-            LEFT JOIN
+            INNER JOIN
                 cte_realized_gains_dividends rld 
                 ON tnx.ticker_id = rld.ticker_id 
                 AND tnx.broker = rld.broker
-            LEFT JOIN
+            INNER JOIN
                 tickers tcr 
                 ON tnx.ticker_id = tcr.id
-            LEFT JOIN
+            INNER JOIN
                 assets ast               
                 ON tcr.asset_id = ast.id 
             WHERE
@@ -224,7 +224,7 @@ impl Portfolio {
         let tickers = sqlx::query(
             r#"
             SELECT * FROM tickers
-            LEFT JOIN assets on tickers.asset_id = assets.id
+            INNER JOIN assets on tickers.asset_id = assets.id
             "#,
         )
         .fetch_all(&self.connection)
@@ -334,66 +334,60 @@ impl Portfolio {
         for (i, record) in reader.records().enumerate() {
             let rec = record.with_context(|| format!("Failed to read CSV record {}", i + 1))?;
 
+            let missing_msg =
+                |col: &str, row: usize| format!("Missing '{}' column in record {}", col, row);
+
+            let failed_to_parse_msg =
+                |col: &str, row: usize| format!("Failed to parse '{}' in record {}", col, row);
+
             let transaction_no = rec
                 .get(0)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("Missing transaction_no column in record {}", i + 1)
-                })?
+                .with_context(|| missing_msg("transaction_no", i + 1))?
                 .parse::<i64>()
-                .with_context(|| format!("Failed to parse transaction_no in record {}", i + 1))?;
+                .with_context(|| failed_to_parse_msg("transaction_no", i + 1))?;
 
-            let date = parse_datetime(
-                rec.get(1)
-                    .ok_or_else(|| anyhow::anyhow!("Missing date column in record {}", i + 1))?,
-            )
-            .with_context(|| format!("Failed to parse date in record {}", i + 1))?;
+            let date = parse_datetime(rec.get(1).with_context(|| missing_msg("date", i + 1))?)
+                .with_context(|| failed_to_parse_msg("date", i + 1))?;
 
             if last_transaction_no != 0 && (transaction_no <= last_transaction_no) {
                 continue;
             }
 
-            let transaction_type = TransactionType::parse_str(rec.get(2).ok_or_else(|| {
-                anyhow::anyhow!("Missing transaction_type column in record {}", i + 1)
-            })?)
-            .with_context(|| format!("Failed to parse transaction_type in record {}", i + 1))?;
+            let transaction_type = TransactionType::parse_str(
+                rec.get(2)
+                    .with_context(|| missing_msg("transaction_type", i + 1))?,
+            )
+            .with_context(|| failed_to_parse_msg("transaction_type", i + 1))?;
             let symbol = rec
                 .get(3)
-                .ok_or_else(|| anyhow::anyhow!("Missing symbol column in record {}", i + 1))?
+                .with_context(|| missing_msg("symbol", i + 1))?
                 .to_string();
             let quantity = parse_decimal(
-                rec.get(4).ok_or_else(|| {
-                    anyhow::anyhow!("Missing quantity column in record {}", i + 1)
-                })?,
+                rec.get(4).with_context(|| missing_msg("quantity", i + 1))?,
                 "quantity",
             )
-            .with_context(|| format!("Failed to parse quantity in record {}", i + 1))?;
+            .with_context(|| failed_to_parse_msg("quantity", i + 1))?;
             let mut price = parse_decimal(
-                rec.get(5)
-                    .ok_or_else(|| anyhow::anyhow!("Missing price column in record {}", i + 1))?,
+                rec.get(5).with_context(|| missing_msg("price", i + 1))?,
                 "price",
             )
-            .with_context(|| format!("Failed to parse price in record {}", i + 1))?;
+            .with_context(|| failed_to_parse_msg("price", i + 1))?;
             let fees = parse_decimal(
-                rec.get(6)
-                    .ok_or_else(|| anyhow::anyhow!("Missing fees column in record {}", i + 1))?,
+                rec.get(6).with_context(|| missing_msg("fees", i + 1))?,
                 "fees",
             )
-            .with_context(|| format!("Failed to parse fees in record {}", i + 1))?;
+            .with_context(|| failed_to_parse_msg("fees", i + 1))?;
             let broker = rec
                 .get(7)
-                .ok_or_else(|| anyhow::anyhow!("Missing broker column in record {}", i + 1))?
+                .with_context(|| missing_msg("broker", i + 1))?
                 .to_string();
             let alternative_symbol = rec
                 .get(8)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("Missing alternative_symbol column in record {}", i + 1)
-                })?
+                .with_context(|| missing_msg("alternative_symbol", i + 1))?
                 .to_string();
             let transaction_currency = rec
                 .get(9)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("Missing transaction_currency column in record {}", i + 1)
-                })?
+                .with_context(|| missing_msg("transaction_currency", i + 1))?
                 .to_string();
 
             let existing_ticker = ticker_map.get(&symbol);

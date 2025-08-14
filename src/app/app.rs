@@ -133,11 +133,14 @@ impl App {
                         })?;
 
                         if let Err(e) = import_result {
-                            self.show_error_popup(&format!("Error importing transactions: {}", e));
+                            self.show_error_popup(&format!(
+                                "Error importing transactions: {:?}",
+                                e
+                            ));
                         } else if let Err(e) = update_result {
-                            self.show_error_popup(&format!("Error updating prices: {}", e));
+                            self.show_error_popup(&format!("Error updating prices: {:?}", e));
                         } else if let Err(e) = holdings_result {
-                            self.show_error_popup(&format!("Error updating holdings: {}", e));
+                            self.show_error_popup(&format!("Error updating holdings: {:?}", e));
                         }
                     }
                     KeyCode::F(5) => {
@@ -171,9 +174,9 @@ impl App {
                         })?;
 
                         if let Err(e) = update_result {
-                            self.show_error_popup(&format!("Error updating prices: {}", e));
+                            self.show_error_popup(&format!("Error updating prices: {:?}", e));
                         } else if let Err(e) = holdings_result {
-                            self.show_error_popup(&format!("Error updating holdings: {}", e));
+                            self.show_error_popup(&format!("Error updating holdings: {:?}", e));
                         }
                     }
                     KeyCode::Down => {

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use reqwest::Client;
 
 use super::{
@@ -14,7 +14,7 @@ pub async fn get_quote(symbol: &str, client: &Client, api_key: &str) -> Result<A
 
     let global_quote = res
         .get("Global Quote")
-        .ok_or_else(|| anyhow::anyhow!("Failed to find 'Global Quote' in the response"))?;
+        .with_context(|| "Failed to find 'Global Quote' in the response")?;
 
     parse_response_object::<AvGlobalQuoteDto>(
         global_quote.clone(),
@@ -36,7 +36,7 @@ pub async fn search_symbol(
 
     let best_matches = res
         .get("bestMatches")
-        .ok_or_else(|| anyhow::anyhow!("Failed to find 'bestMatches' in the response"))?;
+        .with_context(|| "Failed to find 'bestMatches' in the response")?;
 
     parse_response_array::<AvSymbolSearchDto>(
         best_matches.clone(),
