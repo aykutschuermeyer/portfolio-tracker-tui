@@ -2,7 +2,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState},
 };
 use rust_decimal::Decimal;
 
@@ -185,16 +185,17 @@ pub fn render(
     // Render error popup
     if let Some(error_message) = error_popup {
         let area = centered_rect(60, 25, frame.area());
+        frame.render_widget(Clear, area);
         let popup = Paragraph::new(format!(
             "{}\n\nPress Enter or Esc to dismiss",
             error_message
         ))
-        .style(Style::default().fg(Color::White))
+        .style(Style::default().fg(Color::White).bg(Color::Black))
         .block(
             Block::default()
                 .title("Error")
                 .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Red)),
+                .style(Style::default().fg(Color::Red).bg(Color::Black)),
         );
         frame.render_widget(popup, area);
     }

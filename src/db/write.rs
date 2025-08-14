@@ -42,7 +42,7 @@ pub async fn insert_ticker(
     let id = sqlx::query(
         r#"
         INSERT INTO tickers 
-        (symbol, asset_id, currency, exchange, last_price, last_price_updated_at, last_api) 
+        (symbol, asset_id, currency, exchange, last_price, last_price_updated_at, api) 
         VALUES (?, ?, ?, ?, ?, ?, ?)
         "#,
     )
@@ -52,7 +52,7 @@ pub async fn insert_ticker(
     .bind(ticker.exchange())
     .bind(last_price.round_dp(4).to_f64())
     .bind(ticker.last_price_updated_at())
-    .bind(ticker.last_api().to_str())
+    .bind(ticker.api().to_str())
     .execute(&mut **tx)
     .await?
     .last_insert_rowid();

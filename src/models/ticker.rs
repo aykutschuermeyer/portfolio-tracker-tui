@@ -12,7 +12,7 @@ pub struct Ticker {
     exchange: Option<String>,
     last_price: Option<Decimal>,
     last_price_updated_at: Option<DateTime<Local>>,
-    last_api: ApiProvider,
+    api: ApiProvider,
 }
 
 impl Ticker {

@@ -255,9 +255,9 @@ impl Portfolio {
             let last_price_updated_at = row
                 .try_get::<Option<DateTime<Local>>, _>("last_price_updated_at")
                 .with_context(|| missing_msg("last_price_updated_at"))?;
-            let last_api_str = row
-                .try_get::<&str, _>("last_api")
-                .with_context(|| missing_msg("last_api"))?;
+            let api_str = row
+                .try_get::<&str, _>("api")
+                .with_context(|| missing_msg("api"))?;
 
             let ticker = Ticker::new(
                 symbol.clone(),
@@ -266,7 +266,7 @@ impl Portfolio {
                 exchange,
                 Decimal::from_f64(last_price_f64),
                 last_price_updated_at,
-                ApiProvider::parse_str(last_api_str)?,
+                ApiProvider::parse_str(api_str)?,
             );
             ticker_map.insert(symbol, (ticker, ticker_id));
         }
@@ -310,7 +310,6 @@ impl Portfolio {
         let mut reader = Reader::from_path(path)
             .with_context(|| format!("Failed to open CSV file at path: {}", path))?;
 
-        // Validate that CSV has headers
         let headers = reader
             .headers()
             .with_context(|| format!("Failed to read CSV headers from file: {}", path))?;
@@ -326,7 +325,6 @@ impl Portfolio {
 
         let mut ticker_map = self.get_existing_tickers().await?;
         let forex_map = self.get_existing_forex().await?;
-
         let last_transaction_no = self.get_last_transaction_no().await?;
 
         let mut tx = self.connection.begin().await?;
@@ -399,7 +397,7 @@ impl Portfolio {
                             .await;
                     let ticker = match search_result {
                         Ok(result) => result,
-                        Err(primary_error) => {
+                        Err(_) => {
                             match find_ticker(
                                 &alternative_symbol,
                                 &self.client,
@@ -409,7 +407,7 @@ impl Portfolio {
                             .await
                             {
                                 Ok(result) => result,
-                                Err(alternative_error) => {
+                                Err(_) => {
                                     return Err(anyhow::anyhow!(
                                         "Failed to find ticker for symbol '{}'",
                                         symbol,
@@ -518,7 +516,7 @@ impl Portfolio {
     }
 
     pub async fn update_prices(&self) -> Result<()> {
-        let tickers = sqlx::query("SELECT symbol, last_api FROM tickers")
+        let tickers = sqlx::query("SELECT symbol, api FROM tickers")
             .fetch_all(&self.connection)
             .await?;
 
@@ -528,51 +526,26 @@ impl Portfolio {
             let symbol = row
                 .try_get::<&str, _>("symbol")
                 .with_context(|| missing_msg("symbol"))?;
-            let last_api_str = row
-                .try_get::<&str, _>("last_api")
-                .with_context(|| missing_msg("last_api"))?;
-            let api = ApiProvider::parse_str(last_api_str)?;
+            let api_str = row
+                .try_get::<&str, _>("api")
+                .with_context(|| missing_msg("api"))?;
+            let api = ApiProvider::parse_str(api_str)?;
 
-            let price: std::result::Result<Decimal, _>;
-            let mut new_api = api.clone();
-
-            if api == ApiProvider::Fmp {
-                let fmp_quote_result =
-                    fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await;
-                price = match fmp_quote_result {
-                    Ok(result) => {
-                        if result.is_empty() {
-                            return Err(anyhow::anyhow!(
-                                "No price data found for symbol '{}' from FMP",
-                                symbol
-                            ));
-                        }
-                        Ok(*result[0].price())
-                    }
-                    Err(_error) => {
-                        let av_quote = av::get_quote(symbol, &self.client, &self.api_key_av).await;
-                        new_api = ApiProvider::Av;
-                        Decimal::from_str(av_quote?.price())
-                    }
-                };
-            } else {
-                let av_quote_result = av::get_quote(symbol, &self.client, &self.api_key_fmp).await;
-                price = match av_quote_result {
-                    Ok(result) => Decimal::from_str(result.price()),
-                    Err(_error) => {
-                        let fmp_quote =
-                            fmp::get_quote(symbol, &self.client, &self.api_key_av).await?;
-                        if fmp_quote.is_empty() {
-                            return Err(anyhow::anyhow!(
-                                "No price data found for symbol '{}' from FMP fallback",
-                                symbol
-                            ));
-                        }
-                        new_api = ApiProvider::Fmp;
-                        Ok(*fmp_quote[0].price())
-                    }
-                };
-            }
+            let price = match api {
+                ApiProvider::Av => {
+                    let av_quote_result =
+                        av::get_quote(symbol, &self.client, &self.api_key_av).await?;
+                    Decimal::from_str(av_quote_result.price())?
+                }
+                ApiProvider::Fmp => {
+                    let fmp_quote_result =
+                        fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await?;
+                    *fmp_quote_result
+                        .first()
+                        .with_context(|| "Failed to get first entry of FMP quote result")?
+                        .price()
+                }
+            };
 
             sqlx::query(
                 r#"
@@ -580,13 +553,11 @@ impl Portfolio {
                 SET 
                     last_price = ?, 
                     last_price_updated_at = DATETIME('now'), 
-                    last_api = ?,
                     updated_at = DATETIME('now')
                 WHERE symbol = ?
                 "#,
             )
-            .bind(price?.to_f64())
-            .bind(new_api.to_str())
+            .bind(price.to_f64())
             .bind(symbol)
             .execute(&self.connection)
             .await?;

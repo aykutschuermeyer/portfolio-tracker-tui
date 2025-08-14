@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS tickers (
     exchange TEXT,
     last_price REAL,
     last_price_updated_at DATETIME,
-    last_api TEXT NOT NULL,
+    api TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     
