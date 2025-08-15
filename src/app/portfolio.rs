@@ -522,45 +522,89 @@ impl Portfolio {
 
         let missing_msg = |col: &str| format!("Missing '{}' column in tickers query", col);
 
+        let mut ticker_data = Vec::new();
         for row in tickers {
             let symbol = row
                 .try_get::<&str, _>("symbol")
-                .with_context(|| missing_msg("symbol"))?;
+                .with_context(|| missing_msg("symbol"))?
+                .to_string();
             let api_str = row
                 .try_get::<&str, _>("api")
                 .with_context(|| missing_msg("api"))?;
             let api = ApiProvider::parse_str(api_str)?;
+            ticker_data.push((symbol, api));
+        }
 
-            let price = match api {
-                ApiProvider::Av => {
-                    let av_quote_result =
-                        av::get_quote(symbol, &self.client, &self.api_key_av).await?;
-                    Decimal::from_str(av_quote_result.price())?
-                }
-                ApiProvider::Fmp => {
-                    let fmp_quote_result =
-                        fmp::get_quote(symbol, &self.client, &self.api_key_fmp).await?;
-                    *fmp_quote_result
-                        .first()
-                        .with_context(|| "Failed to get first entry of FMP quote result")?
-                        .price()
-                }
-            };
+        let mut handles = Vec::new();
+        for (symbol, api) in ticker_data {
+            let client = self.client.clone();
+            let connection = self.connection.clone();
+            let api_key_av = self.api_key_av.clone();
+            let api_key_fmp = self.api_key_fmp.clone();
 
-            sqlx::query(
-                r#"
-                UPDATE tickers 
-                SET 
-                    last_price = ?, 
-                    last_price_updated_at = DATETIME('now'), 
-                    updated_at = DATETIME('now')
-                WHERE symbol = ?
-                "#,
-            )
-            .bind(price.to_f64())
-            .bind(symbol)
-            .execute(&self.connection)
-            .await?;
+            let handle = tokio::spawn(async move {
+                let price_result = match api {
+                    ApiProvider::Av => {
+                        let av_quote_result = av::get_quote(&symbol, &client, &api_key_av).await?;
+                        Decimal::from_str(av_quote_result.price())
+                            .with_context(|| format!("Failed to parse price for {}", symbol))
+                    }
+                    ApiProvider::Fmp => {
+                        let fmp_quote_result =
+                            fmp::get_quote(&symbol, &client, &api_key_fmp).await?;
+                        Ok(*fmp_quote_result
+                            .first()
+                            .with_context(|| {
+                                format!(
+                                    "Failed to get first entry of FMP quote result for {}",
+                                    symbol
+                                )
+                            })?
+                            .price())
+                    }
+                };
+
+                match price_result {
+                    Ok(price) => {
+                        sqlx::query(
+                            r#"
+                            UPDATE tickers 
+                            SET 
+                                last_price = ?, 
+                                last_price_updated_at = DATETIME('now'), 
+                                updated_at = DATETIME('now')
+                            WHERE symbol = ?
+                            "#,
+                        )
+                        .bind(price.to_f64())
+                        .bind(&symbol)
+                        .execute(&connection)
+                        .await?;
+                        Ok(())
+                    }
+                    Err(e) => Err(anyhow::anyhow!(
+                        "Failed to fetch price for {}: {}",
+                        symbol,
+                        e
+                    )),
+                }
+            });
+            handles.push(handle);
+        }
+
+        let mut errors = Vec::new();
+        for handle in handles {
+            match handle.await? {
+                Ok(()) => {} // Success, do nothing
+                Err(e) => errors.push(e.to_string()),
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Price update errors:\n{}",
+                errors.join("\n")
+            ));
         }
 
         Ok(())

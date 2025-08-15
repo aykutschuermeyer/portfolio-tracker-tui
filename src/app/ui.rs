@@ -139,17 +139,17 @@ pub fn render(
         });
 
         let widths = [
-            Constraint::Length(40),
+            Constraint::Length(50),
             // Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(15),
-            Constraint::Length(15),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(12),
         ];
 
         let mut table = Table::new(rows, widths)
