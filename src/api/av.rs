@@ -12,6 +12,15 @@ pub async fn get_quote(symbol: &str, client: &Client, api_key: &str) -> Result<A
     let params = format!("function=GLOBAL_QUOTE&symbol={}&apikey={}", symbol, api_key);
     let res = make_request(client, BASE_URL, "query", &params).await?;
 
+    if let Some(Ok(note)) = res
+        .get("Information")
+        .map(|v| serde_json::from_value::<String>(v.clone()))
+    {
+        if note.to_lowercase().contains("rate limit") {
+            return Err(anyhow::anyhow!("Rate limit exceeded"));
+        }
+    }
+
     let global_quote = res
         .get("Global Quote")
         .with_context(|| "Failed to find 'Global Quote' in the response")?;

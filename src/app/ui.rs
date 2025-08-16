@@ -62,7 +62,6 @@ pub fn render(
     } else {
         let header_cells = [
             "Name",
-            // "Symbol",
             "Quantity",
             "Price",
             "Value",
@@ -79,7 +78,6 @@ pub fn render(
 
         let rows = holdings.iter().map(|position| {
             let name = position.asset().name();
-            // let ticker_symbol = position.asset().tickers()[0].symbol();
             let quantity = format!("{:.2}", position.quantity());
             let price = format!("{:.2}", position.price());
             let market_value = format!("{:.2}", position.market_value());
@@ -122,7 +120,6 @@ pub fn render(
 
             let cells = [
                 Cell::from(name.to_string()),
-                // Cell::from(ticker_symbol.to_string()),
                 Cell::from(quantity),
                 Cell::from(price),
                 Cell::from(market_value),
@@ -140,16 +137,15 @@ pub fn render(
 
         let widths = [
             Constraint::Length(50),
-            // Constraint::Length(15),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(12),
+            Constraint::Length(11),
+            Constraint::Length(11),
+            Constraint::Length(11),
+            Constraint::Length(11),
+            Constraint::Length(11),
+            Constraint::Length(11),
+            Constraint::Length(11),
+            Constraint::Length(11),
+            Constraint::Length(11),
         ];
 
         let mut table = Table::new(rows, widths)

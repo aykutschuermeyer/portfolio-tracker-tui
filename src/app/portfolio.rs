@@ -397,7 +397,10 @@ impl Portfolio {
                             .await;
                     let ticker = match search_result {
                         Ok(result) => result,
-                        Err(_) => {
+                        Err(primary_error) => {
+                            if alternative_symbol.trim().is_empty() {
+                                return Err(anyhow::anyhow!("\n{:#}", primary_error));
+                            }
                             match find_ticker(
                                 &alternative_symbol,
                                 &self.client,
@@ -407,10 +410,11 @@ impl Portfolio {
                             .await
                             {
                                 Ok(result) => result,
-                                Err(_) => {
+                                Err(alt_error) => {
                                     return Err(anyhow::anyhow!(
-                                        "Failed to find ticker for symbol '{}'",
-                                        symbol,
+                                        "\n{:#}\n{:#}",
+                                        primary_error,
+                                        alt_error
                                     ));
                                 }
                             }
@@ -545,20 +549,21 @@ impl Portfolio {
             let handle = tokio::spawn(async move {
                 let price_result = match api {
                     ApiProvider::Av => {
-                        let av_quote_result = av::get_quote(&symbol, &client, &api_key_av).await?;
-                        Decimal::from_str(av_quote_result.price())
-                            .with_context(|| format!("Failed to parse price for {}", symbol))
+                        let av_quote_result = av::get_quote(&symbol, &client, &api_key_av)
+                            .await
+                            .with_context(|| format!("Alpha Vantage ({})", &symbol))?;
+                        Decimal::from_str(av_quote_result.price()).with_context(|| {
+                            format!("Alpha Vantage ({}): Failed to parse price", symbol)
+                        })
                     }
                     ApiProvider::Fmp => {
-                        let fmp_quote_result =
-                            fmp::get_quote(&symbol, &client, &api_key_fmp).await?;
+                        let fmp_quote_result = fmp::get_quote(&symbol, &client, &api_key_fmp)
+                            .await
+                            .with_context(|| format!("FMP ({})", &symbol))?;
                         Ok(*fmp_quote_result
                             .first()
                             .with_context(|| {
-                                format!(
-                                    "Failed to get first entry of FMP quote result for {}",
-                                    symbol
-                                )
+                                format!("FMP ({}): Failed to get first entry", symbol)
                             })?
                             .price())
                     }
@@ -595,16 +600,13 @@ impl Portfolio {
         let mut errors = Vec::new();
         for handle in handles {
             match handle.await? {
-                Ok(()) => {} // Success, do nothing
-                Err(e) => errors.push(e.to_string()),
+                Ok(()) => {}
+                Err(e) => errors.push(format!("{:#}", e)),
             }
         }
 
         if !errors.is_empty() {
-            return Err(anyhow::anyhow!(
-                "Price update errors:\n{}",
-                errors.join("\n")
-            ));
+            return Err(anyhow::anyhow!("\n{}", errors.join("\n")));
         }
 
         Ok(())

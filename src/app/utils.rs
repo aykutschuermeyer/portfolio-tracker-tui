@@ -29,22 +29,23 @@ pub async fn find_ticker(
     api_key_fmp: &str,
     api_key_av: &str,
 ) -> Result<Ticker> {
-    let av_search_result = av::search_symbol(symbol, client, api_key_av).await;
+    let av_search_result = av::search_symbol(symbol, client, api_key_av)
+        .await
+        .with_context(|| format!("Alpha Vantage ({})", symbol));
     match av_search_result {
         Ok(result) => {
-            let first = result.first().with_context(|| {
-                format!(
-                    "No search results for symbol '{}' from Alpha Vantage",
-                    symbol
-                )
-            })?;
+            let first = result
+                .first()
+                .with_context(|| format!("Alpha Vantage ({}): No search results found", symbol))?;
             Ok(first.to_ticker())
         }
         Err(_) => {
-            let fmp_search_result = fmp::search_symbol(symbol, client, api_key_fmp).await?;
+            let fmp_search_result = fmp::search_symbol(symbol, client, api_key_fmp)
+                .await
+                .with_context(|| format!("FMP ({})", symbol))?;
             let first = fmp_search_result
                 .first()
-                .with_context(|| format!("No search results for symbol '{}' from FMP", symbol))?;
+                .with_context(|| format!("FMP ({}): No search results found", symbol))?;
             Ok(first.to_ticker())
         }
     }
