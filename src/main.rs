@@ -1,13 +1,27 @@
 use std::{env, error::Error, path::Path};
 
+use clap::Parser;
 use portfolio_tracker_tui::app::{App, Portfolio};
 use sqlx::{
     migrate::Migrator,
     sqlite::{SqliteConnectOptions, SqlitePool},
 };
 
+#[derive(Parser)]
+#[command(name = "portfolio-tracker-tui")]
+#[command(about = "A terminal-based portfolio tracker")]
+struct Args {
+    #[arg(
+        long,
+        default_value = "~/.config/portfolio-tracker-tui/transactions.csv"
+    )]
+    csv_path: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+
     let database_url = shellexpand::tilde("~/.local/share/portfolio-tracker-tui/portfolio.db");
     let db_connect_options = SqliteConnectOptions::new()
         .filename(database_url.as_ref())
@@ -25,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     portfolio.set_holdings().await?;
 
     let mut app = App::new(portfolio);
-    app.run().await?;
+    app.run(&args.csv_path).await?;
 
     Ok(())
 }

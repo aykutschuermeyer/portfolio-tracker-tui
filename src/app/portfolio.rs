@@ -404,7 +404,7 @@ impl Portfolio {
                 .get(8)
                 .with_context(|| missing_msg("alternative_symbol", i + 1))?
                 .to_string();
-            let transaction_currency = rec
+            let mut transaction_currency = rec
                 .get(9)
                 .with_context(|| missing_msg("transaction_currency", i + 1))?
                 .to_string();
@@ -432,6 +432,10 @@ impl Portfolio {
             let ticker = ticker_with_id.clone().0;
             let ticker_id = ticker_with_id.clone().1;
             let currency = ticker.currency();
+
+            if transaction_currency.len() == 0 {
+                transaction_currency = ticker.currency().clone();
+            }
 
             if &transaction_currency != currency {
                 let x_rate =

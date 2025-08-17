@@ -49,14 +49,14 @@ impl App {
         self.error_popup = None;
     }
 
-    pub async fn run(&mut self) -> Result<()> {
+    pub async fn run(&mut self, csv_path: &str) -> Result<()> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        let result = self.run_app(&mut terminal).await;
+        let result = self.run_app(&mut terminal, csv_path).await;
 
         disable_raw_mode()?;
         execute!(
@@ -69,7 +69,11 @@ impl App {
         result
     }
 
-    async fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
+    async fn run_app<B: Backend>(
+        &mut self,
+        terminal: &mut Terminal<B>,
+        csv_path: &str,
+    ) -> Result<()> {
         loop {
             terminal.draw(|frame| {
                 ui::render(
@@ -114,8 +118,7 @@ impl App {
                             )
                         })?;
 
-                        let csv_path =
-                            shellexpand::tilde("~/.config/portfolio-tracker-tui/transactions.csv");
+                        let csv_path = shellexpand::tilde(csv_path);
                         let import_result = self.portfolio.import_transactions(&csv_path).await;
                         let update_result = self.portfolio.update_prices().await;
                         let holdings_result = self.portfolio.set_holdings().await;

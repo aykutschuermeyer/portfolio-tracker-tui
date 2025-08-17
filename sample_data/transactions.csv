@@ -1,3 +1,3 @@
-transaction_no,date,transaction_type,symbol,quantity,price,fees,broker
-1,2025-02-12,Buy,TSLA.NASDAQ,10,330.0,10,IBKR
-2,2025-01-21,Buy,BABA.NYSE,100,84.92,10,IBKR
+transaction_no,date,transaction_type,symbol,quantity,price,fees,broker,alternative_symbol,transaction_currency
+1,2025-02-12,Buy,TSLA,10,330.0,10,IBKR,,
+2,2025-01-21,Buy,BABA,100,84.92,10,IBKR,,
