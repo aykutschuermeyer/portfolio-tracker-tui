@@ -321,9 +321,30 @@ impl Portfolio {
             ));
         }
 
-        let mut transactions: Vec<Transaction> = Vec::new();
+        let mut symbols = std::collections::HashSet::new();
+        for record in reader.records() {
+            let rec = record?;
+            if let Some(symbol) = rec.get(3) {
+                symbols.insert(symbol.to_string());
+            }
+            if let Some(alternative_symbol) = rec.get(8) {
+                if alternative_symbol.len() > 0 {
+                    symbols.insert(alternative_symbol.to_string());
+                }
+            }
+        }
+        let unique_symbols: Vec<String> = symbols.into_iter().collect();
 
         let mut ticker_map = self.get_existing_tickers().await?;
+        ticker_map = self
+            .update_tickers(&unique_symbols, &mut ticker_map)
+            .await?;
+
+        let mut reader = Reader::from_path(path)
+            .with_context(|| format!("Failed to reopen CSV file at path: {}", path))?;
+        reader.headers()?;
+
+        let mut transactions: Vec<Transaction> = Vec::new();
         let forex_map = self.get_existing_forex().await?;
         let last_transaction_no = self.get_last_transaction_no().await?;
 
@@ -388,52 +409,28 @@ impl Portfolio {
                 .with_context(|| missing_msg("transaction_currency", i + 1))?
                 .to_string();
 
-            let existing_ticker = ticker_map.get(&symbol);
-            let (ticker, ticker_id) = match existing_ticker {
-                Some(existing_ticker) => existing_ticker,
+            let ticker_lookup_value = ticker_map.get(&symbol);
+
+            let ticker_with_id = match ticker_lookup_value {
+                Some(value) => value,
                 None => {
-                    let search_result =
-                        find_ticker(&symbol, &self.client, &self.api_key_fmp, &self.api_key_av)
-                            .await;
-                    let ticker = match search_result {
-                        Ok(result) => result,
-                        Err(primary_error) => {
-                            if alternative_symbol.trim().is_empty() {
-                                return Err(anyhow::anyhow!("\n{:#}", primary_error));
-                            }
-                            match find_ticker(
-                                &alternative_symbol,
-                                &self.client,
-                                &self.api_key_fmp,
-                                &self.api_key_av,
-                            )
-                            .await
-                            {
-                                Ok(result) => result,
-                                Err(alt_error) => {
-                                    return Err(anyhow::anyhow!(
-                                        "\n{:#}\n{:#}",
-                                        primary_error,
-                                        alt_error
-                                    ));
-                                }
-                            }
-                        }
-                    };
-                    let asset = Asset::new(
-                        ticker.name().to_string(),
-                        AssetType::Stock,
-                        Vec::new(),
-                        None,
-                        None,
-                        None,
-                    );
-                    let new_ticker_id = insert_ticker(&ticker, &asset, &mut tx).await?;
-                    ticker_map.insert(symbol, (ticker.clone(), new_ticker_id));
-                    &(ticker, new_ticker_id)
+                    if alternative_symbol.len() > 0 {
+                        let alternative_lookup_value =
+                            ticker_map.get(&alternative_symbol).with_context(|| {
+                                format!(
+                                    "Could not find symbols {} and {}",
+                                    &symbol, &alternative_symbol
+                                )
+                            })?;
+                        alternative_lookup_value
+                    } else {
+                        return Err(anyhow::anyhow!("Could not find symbol {}", &symbol));
+                    }
                 }
             };
 
+            let ticker = ticker_with_id.clone().0;
+            let ticker_id = ticker_with_id.clone().1;
             let currency = ticker.currency();
 
             if &transaction_currency != currency {
@@ -505,7 +502,7 @@ impl Portfolio {
             transaction.set_position_state(Some(position_state));
             transaction.set_transaction_gains(Some(transaction_gains));
 
-            insert_transaction(&transaction, ticker_id, &mut tx)
+            insert_transaction(&transaction, &ticker_id, &mut tx)
                 .await
                 .with_context(|| format!("Failed to insert transaction in record {}", i + 1))?;
 
@@ -517,6 +514,57 @@ impl Portfolio {
             .with_context(|| "Failed to commit database transaction")?;
 
         Ok(())
+    }
+
+    pub async fn update_tickers(
+        &self,
+        symbols: &Vec<String>,
+        existing_tickers: &mut HashMap<String, (Ticker, i64)>,
+    ) -> Result<HashMap<String, (Ticker, i64)>> {
+        let mut handles = Vec::new();
+        for symbol in symbols {
+            let found_ticker = existing_tickers.get(symbol);
+            if let Some(_ticker) = found_ticker {
+                continue;
+            }
+
+            let symbol_clone = symbol.clone();
+            let client = self.client.clone();
+            let api_key_av = self.api_key_av.clone();
+            let api_key_fmp = self.api_key_fmp.clone();
+            let connection = self.connection.clone();
+
+            let handle = tokio::spawn(async move {
+                let ticker = find_ticker(&symbol_clone, &client, &api_key_fmp, &api_key_av).await?;
+
+                let asset = Asset::new(
+                    ticker.name().to_string(),
+                    AssetType::Stock,
+                    Vec::new(),
+                    None,
+                    None,
+                    None,
+                );
+
+                let mut tx = connection.begin().await?;
+                let new_ticker_id = insert_ticker(&ticker, &asset, &mut tx).await?;
+                tx.commit().await?;
+
+                Ok::<(String, Ticker, i64), anyhow::Error>((symbol_clone, ticker, new_ticker_id))
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            match handle.await? {
+                Ok((symbol, ticker, ticker_id)) => {
+                    existing_tickers.insert(symbol, (ticker, ticker_id));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(existing_tickers.clone())
     }
 
     pub async fn update_prices(&self) -> Result<()> {
