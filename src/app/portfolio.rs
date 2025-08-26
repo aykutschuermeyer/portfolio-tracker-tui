@@ -31,24 +31,19 @@ pub struct Portfolio {
     connection: Pool<Sqlite>,
     holdings: Vec<Holding>,
     client: Client,
-    api_key_av: String,
-    api_key_fmp: String,
+    api_key_av: Option<String>,
+    api_key_fmp: Option<String>,
 }
 
 impl Portfolio {
-    pub fn new(
-        base_currency: String,
-        connection: Pool<Sqlite>,
-        api_key_av: String,
-        api_key_fmp: String,
-    ) -> Self {
+    pub fn new(base_currency: String, connection: Pool<Sqlite>) -> Self {
         Self {
             base_currency,
             connection,
             holdings: Vec::new(),
             client: Client::new(),
-            api_key_av,
-            api_key_fmp,
+            api_key_av: std::env::var("ALPHA_VANTAGE_API_KEY").ok(),
+            api_key_fmp: std::env::var("FMP_API_KEY").ok(),
         }
     }
 
@@ -540,7 +535,6 @@ impl Portfolio {
 
             let handle = tokio::spawn(async move {
                 let ticker = find_ticker(&symbol_clone, &client, &api_key_fmp, &api_key_av).await?;
-
                 let asset = Asset::new(
                     ticker.name().to_string(),
                     AssetType::Stock,
@@ -601,17 +595,25 @@ impl Portfolio {
             let handle = tokio::spawn(async move {
                 let price_result = match api {
                     ApiProvider::Av => {
-                        let av_quote_result = av::get_quote(&symbol, &client, &api_key_av)
-                            .await
-                            .with_context(|| format!("Alpha Vantage ({})", &symbol))?;
+                        let av_quote_result = av::get_quote(
+                            &symbol,
+                            &client,
+                            &api_key_av.with_context(|| "Missing API key for Alpha Vantage")?,
+                        )
+                        .await
+                        .with_context(|| format!("Alpha Vantage ({})", &symbol))?;
                         Decimal::from_str(av_quote_result.price()).with_context(|| {
                             format!("Alpha Vantage ({}): Failed to parse price", symbol)
                         })
                     }
                     ApiProvider::Fmp => {
-                        let fmp_quote_result = fmp::get_quote(&symbol, &client, &api_key_fmp)
-                            .await
-                            .with_context(|| format!("FMP ({})", &symbol))?;
+                        let fmp_quote_result = fmp::get_quote(
+                            &symbol,
+                            &client,
+                            &api_key_fmp.with_context(|| "Missing API key for FMP")?,
+                        )
+                        .await
+                        .with_context(|| format!("FMP ({})", &symbol))?;
                         Ok(*fmp_quote_result
                             .first()
                             .with_context(|| {

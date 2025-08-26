@@ -26,28 +26,30 @@ pub fn parse_decimal(field: &str, field_name: &str) -> Result<Decimal> {
 pub async fn find_ticker(
     symbol: &str,
     client: &Client,
-    api_key_fmp: &str,
-    api_key_av: &str,
+    api_key_fmp: &Option<String>,
+    api_key_av: &Option<String>,
 ) -> Result<Ticker> {
-    let av_search_result = av::search_symbol(symbol, client, api_key_av)
-        .await
-        .with_context(|| format!("Alpha Vantage ({})", symbol));
-    match av_search_result {
-        Ok(result) => {
-            let first = result
-                .first()
-                .with_context(|| format!("Alpha Vantage ({}): No search results found", symbol))?;
-            Ok(first.to_ticker())
+    if let Some(api_key) = api_key_av {
+        let av_search_result = av::search_symbol(symbol, client, api_key)
+            .await
+            .with_context(|| format!("Alpha Vantage ({})", symbol));
+        if let Ok(av_search_result) = av_search_result {
+            let first = av_search_result.first();
+            if let Some(first) = first {
+                return Ok(first.to_ticker());
+            }
         }
-        Err(_) => {
-            let fmp_search_result = fmp::search_symbol(symbol, client, api_key_fmp)
-                .await
-                .with_context(|| format!("FMP ({})", symbol))?;
-            let first = fmp_search_result
-                .first()
-                .with_context(|| format!("FMP ({}): No search results found", symbol))?;
-            Ok(first.to_ticker())
-        }
+    }
+    if let Some(api_key) = api_key_fmp {
+        let fmp_search_result = fmp::search_symbol(symbol, client, api_key)
+            .await
+            .with_context(|| format!("Alpha Vantage ({})", symbol))?;
+        let first = fmp_search_result
+            .first()
+            .with_context(|| "Failed to get first value")?;
+        return Ok(first.to_ticker());
+    } else {
+        return Err(anyhow::anyhow!("Missing API key"));
     }
 }
 

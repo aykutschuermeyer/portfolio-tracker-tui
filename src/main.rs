@@ -1,4 +1,4 @@
-use std::{env, error::Error, path::Path};
+use std::{error::Error, fs, path::Path};
 
 use clap::Parser;
 use portfolio_tracker_tui::app::{App, Portfolio};
@@ -22,19 +22,18 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let database_url = shellexpand::tilde("~/.local/share/portfolio-tracker-tui/portfolio.db");
+    let db_dir = shellexpand::tilde("~/.local/share/portfolio-tracker-tui");
+    fs::create_dir_all(db_dir.as_ref())?;
+    let database_url = format!("{}/portfolio.db", db_dir);
     let db_connect_options = SqliteConnectOptions::new()
-        .filename(database_url.as_ref())
+        .filename(database_url)
         .create_if_missing(true);
     let connection = SqlitePool::connect_with(db_connect_options).await?;
     let migrator = Migrator::new(Path::new("./src/db/migrations")).await?;
 
     migrator.run(&connection).await?;
 
-    let api_key_av = env::var("AV_API_KEY").expect("Missing API key");
-    let api_key_fmp = env::var("FMP_API_KEY").expect("Missing API key");
-
-    let mut portfolio = Portfolio::new(String::from("EUR"), connection, api_key_av, api_key_fmp);
+    let mut portfolio = Portfolio::new(String::from("EUR"), connection);
 
     portfolio.set_holdings().await?;
 
