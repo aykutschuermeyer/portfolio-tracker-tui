@@ -4,4 +4,6 @@ pub mod fmp;
 pub mod fmp_dto;
 pub mod frank;
 pub mod frank_dto;
+pub mod marketstack;
+pub mod marketstack_dto;
 pub mod utils;
