@@ -3,6 +3,7 @@ use chrono::{DateTime, Local};
 use derive_getters::Getters;
 use derive_new::new;
 use rust_decimal::Decimal;
+use strum_macros::EnumIter;
 
 #[derive(Clone, Debug, Getters, new)]
 pub struct Ticker {
@@ -22,25 +23,28 @@ impl Ticker {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, EnumIter, PartialEq)]
 pub enum ApiProvider {
-    Av,
+    AlphaVantage,
     Fmp,
+    Marketstack,
 }
 
 impl ApiProvider {
     pub fn parse_str(s: &str) -> Result<ApiProvider> {
         match s {
-            "Alpha Vantage" => Ok(ApiProvider::Av),
+            "Alpha Vantage" => Ok(ApiProvider::AlphaVantage),
             "Financial Modeling Prep" => Ok(ApiProvider::Fmp),
+            "Marketstack" => Ok(ApiProvider::Marketstack),
             _ => Err(anyhow::anyhow!("Unknown API provider")),
         }
     }
 
     pub fn to_str(&self) -> &str {
         match self {
-            ApiProvider::Av => "Alpha Vantage",
+            ApiProvider::AlphaVantage => "Alpha Vantage",
             ApiProvider::Fmp => "Financial Modeling Prep",
+            ApiProvider::Marketstack => "Marketstack",
         }
     }
 }

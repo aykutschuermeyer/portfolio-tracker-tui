@@ -23,8 +23,8 @@ pub async fn insert_ticker(
         Ok(row) => row.get::<i64, _>("id"),
         Err(_) => sqlx::query(
             r#"
-            INSERT INTO assets 
-            (name, asset_type, isin, sector, industry) 
+            INSERT INTO assets
+            (name, asset_type, isin, sector, industry)
             VALUES (?, ?, ?, ?, ?)
             "#,
         )
@@ -41,8 +41,8 @@ pub async fn insert_ticker(
     let last_price = ticker.last_price().unwrap_or(Decimal::ZERO);
     let id = sqlx::query(
         r#"
-        INSERT INTO tickers 
-        (symbol, asset_id, currency, exchange, last_price, last_price_updated_at, api) 
+        INSERT INTO tickers
+        (symbol, asset_id, currency, exchange, last_price, last_price_updated_at, api)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         "#,
     )
@@ -94,7 +94,7 @@ pub async fn insert_transaction(
             cost_of_units_sold,
             realized_gains,
             dividends_collected
-        ) 
+        )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )

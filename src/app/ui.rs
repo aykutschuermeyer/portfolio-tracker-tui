@@ -2,11 +2,14 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState},
+    widgets::{
+        Block, Borders, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table, TableState,
+    },
 };
 use rust_decimal::Decimal;
+use strum::IntoEnumIterator;
 
-use crate::app::portfolio::Portfolio;
+use crate::{app::portfolio::Portfolio, models::ticker::ApiProvider};
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
@@ -34,6 +37,8 @@ pub fn render(
     table_state: &mut TableState,
     popup_message: &Option<String>,
     error_popup: &Option<String>,
+    api_selection_popup: bool,
+    default_api_state: &mut ListState,
     selection_mode: bool,
 ) {
     let chunks = Layout::default()
@@ -45,9 +50,12 @@ pub fn render(
         ])
         .split(frame.area());
 
-    let title = Paragraph::new("Portfolio Tracker")
-        .style(Style::default().fg(Color::Cyan))
-        .block(Block::default().borders(Borders::ALL));
+    let title = Paragraph::new(format!(
+        "Portfolio Tracker (default API: {})",
+        portfolio.default_api().to_str()
+    ))
+    .style(Style::default().fg(Color::Cyan))
+    .block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(title, chunks[0]);
 
@@ -159,9 +167,11 @@ pub fn render(
         frame.render_stateful_widget(table, chunks[1], table_state);
     }
 
-    let footer = Paragraph::new("F4: Import Transactions | F5: Update Prices | q: Quit")
-        .style(Style::default().fg(Color::Yellow))
-        .block(Block::default().borders(Borders::ALL));
+    let footer = Paragraph::new(
+        "F4: Import Transactions | F5: Update Prices | F8: Change default API | q: Quit",
+    )
+    .style(Style::default().fg(Color::Yellow))
+    .block(Block::default().borders(Borders::ALL));
     frame.render_widget(footer, chunks[2]);
 
     // Render loading popup
@@ -194,5 +204,26 @@ pub fn render(
                 .style(Style::default().fg(Color::Red).bg(Color::Black)),
         );
         frame.render_widget(popup, area);
+    }
+
+    // Render API selection popup
+    if api_selection_popup {
+        let area = centered_rect(60, 25, frame.area());
+        let items = ApiProvider::iter().map(|api| ListItem::new(format!("{:?}", api)));
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .title("Select default API")
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::Yellow)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol(">> ");
+
+        frame.render_stateful_widget(list, area, default_api_state);
     }
 }

@@ -61,7 +61,7 @@ impl AvSymbolSearchDto {
             Some(String::from("")),
             None,
             None,
-            ApiProvider::Av,
+            ApiProvider::AlphaVantage,
         )
     }
 }

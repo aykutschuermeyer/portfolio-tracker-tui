@@ -1,4 +1,4 @@
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -19,7 +19,8 @@ pub async fn make_request(
     }
 
     let text = res.text().await?;
-    let data = serde_json::from_str::<Value>(&text)?;
+    let data = serde_json::from_str::<Value>(&text)
+        .with_context(|| format!("JSON parse error: {}", text))?;
 
     Ok(data)
 }

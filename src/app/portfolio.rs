@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Local};
@@ -13,7 +13,7 @@ use rust_decimal_macros::dec;
 use sqlx::{Pool, Row, Sqlite};
 
 use crate::{
-    api::{av, fmp},
+    app::utils::get_latest_price,
     db::write::{insert_ticker, insert_transaction},
     models::{
         Asset, AssetType, Holding, Ticker, Transaction, TransactionType, ticker::ApiProvider,
@@ -31,8 +31,10 @@ pub struct Portfolio {
     connection: Pool<Sqlite>,
     holdings: Vec<Holding>,
     client: Client,
-    api_key_av: Option<String>,
+    default_api: ApiProvider,
+    api_key_alpha_vantage: Option<String>,
     api_key_fmp: Option<String>,
+    api_key_marketstack: Option<String>,
 }
 
 impl Portfolio {
@@ -42,9 +44,15 @@ impl Portfolio {
             connection,
             holdings: Vec::new(),
             client: Client::new(),
-            api_key_av: std::env::var("ALPHA_VANTAGE_API_KEY").ok(),
+            default_api: ApiProvider::AlphaVantage,
+            api_key_alpha_vantage: std::env::var("ALPHA_VANTAGE_API_KEY").ok(),
             api_key_fmp: std::env::var("FMP_API_KEY").ok(),
+            api_key_marketstack: std::env::var("MARKETSTACK_API_KEY").ok(),
         }
+    }
+
+    pub fn set_default_api(&mut self, api: ApiProvider) {
+        self.default_api = api;
     }
 
     pub async fn set_holdings(&mut self) -> Result<()> {
@@ -64,7 +72,7 @@ impl Portfolio {
                     ticker_id
             ),
             cte_transactions_rn AS (
-                SELECT 
+                SELECT
                     transactions.*,
                     ROW_NUMBER() OVER (PARTITION BY ticker_id, broker ORDER BY transaction_no DESC)
                         AS rn
@@ -97,15 +105,15 @@ impl Portfolio {
             FROM
                 cte_transactions tnx
             INNER JOIN
-                cte_realized_gains_dividends rld 
-                ON tnx.ticker_id = rld.ticker_id 
+                cte_realized_gains_dividends rld
+                ON tnx.ticker_id = rld.ticker_id
                 AND tnx.broker = rld.broker
             INNER JOIN
-                tickers tcr 
+                tickers tcr
                 ON tnx.ticker_id = tcr.id
             INNER JOIN
-                assets ast               
-                ON tcr.asset_id = ast.id 
+                assets ast
+                ON tcr.asset_id = ast.id
             WHERE
                 tnx.cumulative_units > 0
             "#,
@@ -301,7 +309,7 @@ impl Portfolio {
         Ok(result.unwrap_or(0))
     }
 
-    pub async fn import_transactions(&mut self, path: &str) -> Result<()> {
+    pub async fn import_transactions(&mut self, path: &str, api: &ApiProvider) -> Result<()> {
         let mut reader = Reader::from_path(path)
             .with_context(|| format!("Failed to open CSV file at path: {}", path))?;
 
@@ -332,7 +340,7 @@ impl Portfolio {
 
         let mut ticker_map = self.get_existing_tickers().await?;
         ticker_map = self
-            .update_tickers(&unique_symbols, &mut ticker_map)
+            .update_tickers(&unique_symbols, &mut ticker_map, api)
             .await?;
 
         let mut reader = Reader::from_path(path)
@@ -519,6 +527,7 @@ impl Portfolio {
         &self,
         symbols: &Vec<String>,
         existing_tickers: &mut HashMap<String, (Ticker, i64)>,
+        api: &ApiProvider,
     ) -> Result<HashMap<String, (Ticker, i64)>> {
         let mut handles = Vec::new();
         for symbol in symbols {
@@ -529,12 +538,12 @@ impl Portfolio {
 
             let symbol_clone = symbol.clone();
             let client = self.client.clone();
-            let api_key_av = self.api_key_av.clone();
-            let api_key_fmp = self.api_key_fmp.clone();
             let connection = self.connection.clone();
 
+            let provider = api.clone();
+
             let handle = tokio::spawn(async move {
-                let ticker = find_ticker(&symbol_clone, &client, &api_key_fmp, &api_key_av).await?;
+                let ticker = find_ticker(&symbol_clone, &client, &provider).await?;
                 let asset = Asset::new(
                     ticker.name().to_string(),
                     AssetType::Stock,
@@ -589,48 +598,17 @@ impl Portfolio {
         for (symbol, api) in ticker_data {
             let client = self.client.clone();
             let connection = self.connection.clone();
-            let api_key_av = self.api_key_av.clone();
-            let api_key_fmp = self.api_key_fmp.clone();
 
             let handle = tokio::spawn(async move {
-                let price_result = match api {
-                    ApiProvider::Av => {
-                        let av_quote_result = av::get_quote(
-                            &symbol,
-                            &client,
-                            &api_key_av.with_context(|| "Missing API key for Alpha Vantage")?,
-                        )
-                        .await
-                        .with_context(|| format!("Alpha Vantage ({})", &symbol))?;
-                        Decimal::from_str(av_quote_result.price()).with_context(|| {
-                            format!("Alpha Vantage ({}): Failed to parse price", symbol)
-                        })
-                    }
-                    ApiProvider::Fmp => {
-                        let fmp_quote_result = fmp::get_quote(
-                            &symbol,
-                            &client,
-                            &api_key_fmp.with_context(|| "Missing API key for FMP")?,
-                        )
-                        .await
-                        .with_context(|| format!("FMP ({})", &symbol))?;
-                        Ok(*fmp_quote_result
-                            .first()
-                            .with_context(|| {
-                                format!("FMP ({}): Failed to get first entry", symbol)
-                            })?
-                            .price())
-                    }
-                };
-
+                let price_result = get_latest_price(&symbol, &client, &api).await;
                 match price_result {
                     Ok(price) => {
                         sqlx::query(
                             r#"
-                            UPDATE tickers 
-                            SET 
-                                last_price = ?, 
-                                last_price_updated_at = DATETIME('now'), 
+                            UPDATE tickers
+                            SET
+                                last_price = ?,
+                                last_price_updated_at = DATETIME('now'),
                                 updated_at = DATETIME('now')
                             WHERE symbol = ?
                             "#,
