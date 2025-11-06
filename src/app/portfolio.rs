@@ -14,7 +14,7 @@ use sqlx::{Pool, Row, Sqlite};
 
 use crate::{
     app::utils::get_latest_price,
-    db::write::{insert_ticker, insert_transaction},
+    db::utils::{insert_ticker, insert_transaction, truncate_tables},
     models::{
         Asset, AssetType, Holding, Ticker, Transaction, TransactionType, ticker::ApiProvider,
     },
@@ -49,6 +49,12 @@ impl Portfolio {
             api_key_fmp: std::env::var("FMP_API_KEY").ok(),
             api_key_marketstack: std::env::var("MARKETSTACK_API_KEY").ok(),
         }
+    }
+
+    pub async fn reset(&mut self, clear_assets: bool) -> Result<()> {
+        truncate_tables(&self.connection, clear_assets).await?;
+
+        Ok(())
     }
 
     pub fn set_default_api(&mut self, api: ApiProvider) {

@@ -40,6 +40,8 @@ pub fn render(
     api_selection_popup: bool,
     default_api_state: &mut ListState,
     selection_mode: bool,
+    database_reset_popup: bool,
+    default_reset_state: &mut ListState,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -167,9 +169,13 @@ pub fn render(
         frame.render_stateful_widget(table, chunks[1], table_state);
     }
 
-    let footer = Paragraph::new(
-        "F4: Import Transactions | F5: Update Prices | F8: Change default API | q: Quit",
-    )
+    let footer = Paragraph::new(concat!(
+        "F4: Import Transactions | ",
+        "F5: Update Prices | ",
+        "F8: Change default API | ",
+        "F12: Reset | ",
+        "Q: Quit",
+    ))
     .style(Style::default().fg(Color::Yellow))
     .block(Block::default().borders(Borders::ALL));
     frame.render_widget(footer, chunks[2]);
@@ -225,5 +231,30 @@ pub fn render(
             .highlight_symbol(">> ");
 
         frame.render_stateful_widget(list, area, default_api_state);
+    }
+
+    // Render databse reset popup
+    if database_reset_popup {
+        let area = centered_rect(60, 25, frame.area());
+        let items = Vec::from([
+            "Cancel",
+            "Clear transactions and holdings",
+            "Clear everything including tickers",
+        ]);
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .title("Clear database")
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::Yellow)),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol(">> ");
+
+        frame.render_stateful_widget(list, area, default_reset_state);
     }
 }

@@ -26,12 +26,16 @@ pub struct App {
     show_api_popup: bool,
     default_api_state: ListState,
     selection_mode: bool,
+    show_clear_database_popup: bool,
+    default_reset_state: ListState,
 }
 
 impl App {
     pub fn new(portfolio: Portfolio) -> Self {
         let mut default_api_list_state = ListState::default();
         default_api_list_state.select(Some(0));
+        let mut default_reset_list_state = ListState::default();
+        default_reset_list_state.select(Some(0));
         Self {
             portfolio,
             table_state: TableState::default(),
@@ -40,6 +44,8 @@ impl App {
             show_api_popup: false,
             default_api_state: default_api_list_state,
             selection_mode: false,
+            show_clear_database_popup: false,
+            default_reset_state: default_reset_list_state,
         }
     }
 
@@ -95,6 +101,8 @@ impl App {
                     self.show_api_popup,
                     &mut self.default_api_state,
                     self.selection_mode,
+                    self.show_clear_database_popup,
+                    &mut self.default_reset_state,
                 )
             })?;
 
@@ -150,6 +158,73 @@ impl App {
                     }
                 }
 
+                if self.show_clear_database_popup {
+                    self.selection_mode = false;
+                    self.table_state.select(None);
+                    let i = Some(0);
+                    match key.code {
+                        KeyCode::Esc => self.show_clear_database_popup = false,
+                        KeyCode::Down => {
+                            let i = match self.default_reset_state.selected() {
+                                Some(i) => {
+                                    if i == 0 {
+                                        1
+                                    } else {
+                                        i + 1
+                                    }
+                                }
+                                None => 0,
+                            };
+                            self.default_reset_state.select(Some(i));
+                        }
+                        KeyCode::Up => {
+                            let i = match self.default_reset_state.selected() {
+                                Some(i) => {
+                                    if i == 0 {
+                                        0
+                                    } else {
+                                        i - 1
+                                    }
+                                }
+                                None => 0,
+                            };
+                            self.default_reset_state.select(Some(i));
+                        }
+                        KeyCode::Enter => match self.default_reset_state.selected() {
+                            Some(0) => {
+                                self.show_clear_database_popup = false;
+                                self.selection_mode = true;
+                            }
+                            Some(1) => {
+                                self.portfolio.reset(false).await?;
+                                self.show_clear_database_popup = false;
+                                self.selection_mode = true;
+                            }
+                            Some(2) => {
+                                self.portfolio.reset(true).await?;
+                                self.show_clear_database_popup = false;
+                                self.selection_mode = true;
+                                terminal.draw(|frame| {
+                                    ui::render(
+                                        frame,
+                                        &self.portfolio,
+                                        &mut self.table_state,
+                                        &self.popup_message,
+                                        &self.error_popup,
+                                        self.show_api_popup,
+                                        &mut self.default_api_state,
+                                        self.selection_mode,
+                                        self.show_clear_database_popup,
+                                        &mut self.default_reset_state,
+                                    )
+                                })?;
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
                     KeyCode::Enter | KeyCode::Esc => {
@@ -176,6 +251,8 @@ impl App {
                                 self.show_api_popup,
                                 &mut self.default_api_state,
                                 self.selection_mode,
+                                self.show_clear_database_popup,
+                                &mut self.default_reset_state,
                             )
                         })?;
 
@@ -199,6 +276,8 @@ impl App {
                                 self.show_api_popup,
                                 &mut self.default_api_state,
                                 self.selection_mode,
+                                self.show_clear_database_popup,
+                                &mut self.default_reset_state,
                             )
                         })?;
 
@@ -227,6 +306,8 @@ impl App {
                                 self.show_api_popup,
                                 &mut self.default_api_state,
                                 self.selection_mode,
+                                self.show_clear_database_popup,
+                                &mut self.default_reset_state,
                             )
                         })?;
 
@@ -244,6 +325,8 @@ impl App {
                                 self.show_api_popup,
                                 &mut self.default_api_state,
                                 self.selection_mode,
+                                self.show_clear_database_popup,
+                                &mut self.default_reset_state,
                             )
                         })?;
 
@@ -256,6 +339,10 @@ impl App {
                     KeyCode::F(8) => {
                         self.selection_mode = false;
                         self.show_api_popup = true;
+                    }
+                    KeyCode::F(12) => {
+                        self.selection_mode = false;
+                        self.show_clear_database_popup = true;
                     }
                     KeyCode::Down => {
                         if !self.show_api_popup {

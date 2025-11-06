@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
-use sqlx::{Row, Sqlite};
+use sqlx::{Pool, Row, Sqlite};
 
 use crate::models::{Asset, Ticker, Transaction};
 
@@ -118,4 +118,21 @@ pub async fn insert_transaction(
     .last_insert_rowid();
 
     Ok(id)
+}
+
+pub async fn truncate_tables(connection: &Pool<Sqlite>, clear_assets: bool) -> Result<()> {
+    let mut tx = connection.begin().await?;
+
+    sqlx::query("DELETE FROM transactions")
+        .execute(&mut *tx)
+        .await?;
+
+    if clear_assets {
+        sqlx::query("DELETE FROM tickers").execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM assets").execute(&mut *tx).await?;
+    }
+
+    tx.commit().await?;
+
+    Ok(())
 }
