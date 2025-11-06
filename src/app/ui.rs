@@ -31,6 +31,205 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
+fn gain_color(value: Decimal) -> Color {
+    if value >= Decimal::ZERO {
+        Color::Green
+    } else {
+        Color::Red
+    }
+}
+
+fn format_colored_gain(value: Decimal) -> (String, Color) {
+    (format!("{:.2}", value.abs()), gain_color(value))
+}
+
+fn format_colored_percentage(value: Decimal) -> (String, Color) {
+    (format!("{:.2}%", value.abs()), gain_color(value))
+}
+
+fn render_title(frame: &mut Frame, portfolio: &Portfolio, area: Rect) {
+    let title = Paragraph::new(format!(
+        "Portfolio Tracker (default API: {})",
+        portfolio.default_api().to_str()
+    ))
+    .style(Style::default().fg(Color::Cyan))
+    .block(Block::default().borders(Borders::ALL));
+
+    frame.render_widget(title, area);
+}
+
+fn render_footer(frame: &mut Frame, area: Rect) {
+    let footer = Paragraph::new(concat!(
+        "F4: Import Transactions | ",
+        "F5: Update Prices | ",
+        "F8: Change default API | ",
+        "F12: Reset | ",
+        "Q: Quit",
+    ))
+    .style(Style::default().fg(Color::Yellow))
+    .block(Block::default().borders(Borders::ALL));
+    frame.render_widget(footer, area);
+}
+
+fn render_holdings_table(
+    frame: &mut Frame,
+    portfolio: &Portfolio,
+    table_state: &mut TableState,
+    selection_mode: bool,
+    area: Rect,
+) {
+    let holdings = portfolio.holdings();
+
+    if holdings.is_empty() {
+        let empty_message =
+            Paragraph::new("No holdings to display. Press F4 to import transactions.")
+                .style(Style::default().fg(Color::Yellow))
+                .block(Block::default().borders(Borders::ALL));
+        frame.render_widget(empty_message, area);
+        return;
+    }
+
+    let header_cells = [
+        "Name",
+        "Quantity",
+        "Price",
+        "Value",
+        "Cost",
+        "Unr. G/L",
+        "Unr. G/L %",
+        "Real. G/L",
+        "Div.",
+        "Total G/L",
+    ]
+    .iter()
+    .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow)));
+    let header = Row::new(header_cells).style(Style::default()).height(1);
+
+    let rows = holdings.iter().map(|position| {
+        let (unrealized_gain_str, color_unrealized) =
+            format_colored_gain(*position.unrealized_gain());
+        let (unrealized_percent_str, color_unrealized_percent) =
+            format_colored_percentage(*position.unrealized_gain_percent());
+        let (realized_gain_str, color_realized) = format_colored_gain(*position.realized_gain());
+        let (total_gain_str, color_total) = format_colored_gain(*position.total_gain());
+
+        let cells = [
+            Cell::from(position.asset().name().to_string()),
+            Cell::from(format!("{:.2}", position.quantity())),
+            Cell::from(format!("{:.2}", position.price())),
+            Cell::from(format!("{:.2}", position.market_value())),
+            Cell::from(format!("{:.2}", position.total_cost())),
+            Cell::from(unrealized_gain_str).style(Style::default().fg(color_unrealized)),
+            Cell::from(unrealized_percent_str).style(Style::default().fg(color_unrealized_percent)),
+            Cell::from(realized_gain_str).style(Style::default().fg(color_realized)),
+            Cell::from(format!("{:.2}", position.dividends_collected()))
+                .style(Style::default().fg(Color::Green)),
+            Cell::from(total_gain_str).style(Style::default().fg(color_total)),
+        ];
+
+        Row::new(cells).height(1)
+    });
+
+    let widths = [
+        Constraint::Length(50),
+        Constraint::Length(11),
+        Constraint::Length(11),
+        Constraint::Length(11),
+        Constraint::Length(11),
+        Constraint::Length(11),
+        Constraint::Length(11),
+        Constraint::Length(11),
+        Constraint::Length(11),
+        Constraint::Length(11),
+    ];
+
+    let mut table = Table::new(rows, widths)
+        .header(header)
+        .block(Block::default().title("Positions").borders(Borders::ALL));
+
+    if selection_mode {
+        table = table.row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+    }
+
+    frame.render_stateful_widget(table, area, table_state);
+}
+
+fn render_message_popup(frame: &mut Frame, message: &str) {
+    let area = centered_rect(50, 20, frame.area());
+    let popup = Paragraph::new(message)
+        .style(Style::default().fg(Color::White))
+        .block(
+            Block::default()
+                .title("Processing")
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::Yellow)),
+        );
+    frame.render_widget(popup, area);
+}
+
+fn render_error_popup(frame: &mut Frame, error_message: &str) {
+    let area = centered_rect(60, 25, frame.area());
+    frame.render_widget(Clear, area);
+    let popup = Paragraph::new(format!(
+        "{}\n\nPress Enter or Esc to dismiss",
+        error_message
+    ))
+    .style(Style::default().fg(Color::White).bg(Color::Black))
+    .block(
+        Block::default()
+            .title("Error")
+            .borders(Borders::ALL)
+            .style(Style::default().fg(Color::Red).bg(Color::Black)),
+    );
+    frame.render_widget(popup, area);
+}
+
+fn render_api_selection_popup(frame: &mut Frame, default_api_state: &mut ListState) {
+    let area = centered_rect(60, 25, frame.area());
+    let items: Vec<ListItem> = ApiProvider::iter()
+        .map(|api| ListItem::new(format!("{:?}", api)))
+        .collect();
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title("Select default API")
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::Yellow)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol(">> ");
+
+    frame.render_stateful_widget(list, area, default_api_state);
+}
+
+fn render_database_reset_popup(frame: &mut Frame, default_reset_state: &mut ListState) {
+    let area = centered_rect(60, 25, frame.area());
+    let items = vec![
+        ListItem::new("Cancel"),
+        ListItem::new("Clear transactions and holdings"),
+        ListItem::new("Clear everything including tickers"),
+    ];
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title("Clear database")
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::Yellow)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol(">> ");
+
+    frame.render_stateful_widget(list, area, default_reset_state);
+}
+
 pub fn render(
     frame: &mut Frame,
     portfolio: &Portfolio,
@@ -52,209 +251,23 @@ pub fn render(
         ])
         .split(frame.area());
 
-    let title = Paragraph::new(format!(
-        "Portfolio Tracker (default API: {})",
-        portfolio.default_api().to_str()
-    ))
-    .style(Style::default().fg(Color::Cyan))
-    .block(Block::default().borders(Borders::ALL));
+    render_title(frame, portfolio, chunks[0]);
+    render_holdings_table(frame, portfolio, table_state, selection_mode, chunks[1]);
+    render_footer(frame, chunks[2]);
 
-    frame.render_widget(title, chunks[0]);
-
-    let holdings = portfolio.holdings();
-
-    if holdings.is_empty() {
-        let empty_message =
-            Paragraph::new("No holdings to display. Press F4 to import transactions.")
-                .style(Style::default().fg(Color::Yellow))
-                .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(empty_message, chunks[1]);
-    } else {
-        let header_cells = [
-            "Name",
-            "Quantity",
-            "Price",
-            "Value",
-            "Cost",
-            "Unr. G/L",
-            "Unr. G/L %",
-            "Real. G/L",
-            "Div.",
-            "Total G/L",
-        ]
-        .iter()
-        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow)));
-        let header = Row::new(header_cells).style(Style::default()).height(1);
-
-        let rows = holdings.iter().map(|position| {
-            let name = position.asset().name();
-            let quantity = format!("{:.2}", position.quantity());
-            let price = format!("{:.2}", position.price());
-            let market_value = format!("{:.2}", position.market_value());
-            let cost_basis = format!("{:.2}", position.total_cost());
-            let dividends_collected = format!("{:.2}", position.dividends_collected());
-
-            let unrealized_gain = *position.unrealized_gain();
-            let realized_gain = *position.realized_gain();
-            let unrealized_gain_percent = *position.unrealized_gain_percent();
-            let total_gain = *position.total_gain();
-
-            let color_unrealized_gain = if unrealized_gain >= Decimal::ZERO {
-                Color::Green
-            } else {
-                Color::Red
-            };
-
-            let color_realized_gain = if realized_gain >= Decimal::ZERO {
-                Color::Green
-            } else {
-                Color::Red
-            };
-
-            let color_unrealized_gain_percent = if unrealized_gain_percent >= Decimal::ZERO {
-                Color::Green
-            } else {
-                Color::Red
-            };
-
-            let color_total_gain = if total_gain >= Decimal::ZERO {
-                Color::Green
-            } else {
-                Color::Red
-            };
-
-            let unrealized_gain_str = format!("{:.2}", unrealized_gain.abs());
-            let urealized_gain_percent_str = format!("{:.2}%", unrealized_gain_percent.abs());
-            let realized_gain_str = format!("{:.2}", realized_gain.abs());
-            let total_gain_str = format!("{:.2}", total_gain.abs());
-
-            let cells = [
-                Cell::from(name.to_string()),
-                Cell::from(quantity),
-                Cell::from(price),
-                Cell::from(market_value),
-                Cell::from(cost_basis),
-                Cell::from(unrealized_gain_str).style(Style::default().fg(color_unrealized_gain)),
-                Cell::from(urealized_gain_percent_str)
-                    .style(Style::default().fg(color_unrealized_gain_percent)),
-                Cell::from(realized_gain_str).style(Style::default().fg(color_realized_gain)),
-                Cell::from(dividends_collected).style(Style::default().fg(Color::Green)),
-                Cell::from(total_gain_str).style(Style::default().fg(color_total_gain)),
-            ];
-
-            Row::new(cells).height(1)
-        });
-
-        let widths = [
-            Constraint::Length(50),
-            Constraint::Length(11),
-            Constraint::Length(11),
-            Constraint::Length(11),
-            Constraint::Length(11),
-            Constraint::Length(11),
-            Constraint::Length(11),
-            Constraint::Length(11),
-            Constraint::Length(11),
-            Constraint::Length(11),
-        ];
-
-        let mut table = Table::new(rows, widths)
-            .header(header)
-            .block(Block::default().title("Positions").borders(Borders::ALL));
-
-        if selection_mode {
-            table = table.row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-        }
-
-        frame.render_stateful_widget(table, chunks[1], table_state);
-    }
-
-    let footer = Paragraph::new(concat!(
-        "F4: Import Transactions | ",
-        "F5: Update Prices | ",
-        "F8: Change default API | ",
-        "F12: Reset | ",
-        "Q: Quit",
-    ))
-    .style(Style::default().fg(Color::Yellow))
-    .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(footer, chunks[2]);
-
-    // Render loading popup
     if let Some(message) = popup_message {
-        let area = centered_rect(50, 20, frame.area());
-        let popup = Paragraph::new(message.as_str())
-            .style(Style::default().fg(Color::White))
-            .block(
-                Block::default()
-                    .title("Processing")
-                    .borders(Borders::ALL)
-                    .style(Style::default().fg(Color::Yellow)),
-            );
-        frame.render_widget(popup, area);
+        render_message_popup(frame, message);
     }
 
-    // Render error popup
     if let Some(error_message) = error_popup {
-        let area = centered_rect(60, 25, frame.area());
-        frame.render_widget(Clear, area);
-        let popup = Paragraph::new(format!(
-            "{}\n\nPress Enter or Esc to dismiss",
-            error_message
-        ))
-        .style(Style::default().fg(Color::White).bg(Color::Black))
-        .block(
-            Block::default()
-                .title("Error")
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Red).bg(Color::Black)),
-        );
-        frame.render_widget(popup, area);
+        render_error_popup(frame, error_message);
     }
 
-    // Render API selection popup
     if api_selection_popup {
-        let area = centered_rect(60, 25, frame.area());
-        let items = ApiProvider::iter().map(|api| ListItem::new(format!("{:?}", api)));
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .title("Select default API")
-                    .borders(Borders::ALL)
-                    .style(Style::default().fg(Color::Yellow)),
-            )
-            .highlight_style(
-                Style::default()
-                    .bg(Color::Blue)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol(">> ");
-
-        frame.render_stateful_widget(list, area, default_api_state);
+        render_api_selection_popup(frame, default_api_state);
     }
 
-    // Render databse reset popup
     if database_reset_popup {
-        let area = centered_rect(60, 25, frame.area());
-        let items = Vec::from([
-            "Cancel",
-            "Clear transactions and holdings",
-            "Clear everything including tickers",
-        ]);
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .title("Clear database")
-                    .borders(Borders::ALL)
-                    .style(Style::default().fg(Color::Yellow)),
-            )
-            .highlight_style(
-                Style::default()
-                    .bg(Color::Blue)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol(">> ");
-
-        frame.render_stateful_widget(list, area, default_reset_state);
+        render_database_reset_popup(frame, default_reset_state);
     }
 }
