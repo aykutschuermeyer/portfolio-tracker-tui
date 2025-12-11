@@ -15,14 +15,18 @@ pub async fn search_symbol(
 ) -> Result<Vec<FmpSearchSymbolDto>> {
     let params = format!("query={}&apikey={}", symbol, api_key);
     let res = make_request(client, BASE_URL, "search-symbol", &params).await?;
-    parse_response_array::<FmpSearchSymbolDto>(res, &format!("No results for symbol {symbol}"))
-        .await
+    parse_response_array::<FmpSearchSymbolDto>(
+        res,
+        &format!("Failed to parse FMP symbol {}", symbol),
+    )
+    .await
 }
 
 pub async fn get_quote(symbol: &str, client: &Client, api_key: &str) -> Result<Vec<FmpQuoteDto>> {
     let params = format!("symbol={}&apikey={}", symbol, api_key);
     let res = make_request(client, BASE_URL, "quote", &params).await?;
-    parse_response_array::<FmpQuoteDto>(res, &format!("No Results for symbol {symbol}")).await
+    parse_response_array::<FmpQuoteDto>(res, &format!("Failed to parse FMP quote for {}", symbol))
+        .await
 }
 
 pub async fn get_quote_history(
@@ -39,7 +43,7 @@ pub async fn get_quote_history(
     let res = make_request(client, BASE_URL, "historical-price-eod/light", &params).await?;
     parse_response_array::<FmpQuoteHistoryDto>(
         res,
-        &format!("No results for symbol {symbol} from {start_date} to {end_date}"),
+        &format!("Failed to parse FMP quote for {}", symbol),
     )
     .await
 }

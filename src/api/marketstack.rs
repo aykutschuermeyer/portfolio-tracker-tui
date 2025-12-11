@@ -22,7 +22,7 @@ pub async fn get_quote(
 
     parse_response_array::<MarketstackQuoteDto>(
         quote.clone(),
-        &format!("No results for symbol {}", symbol),
+        &format!("Failed to parse Marketstack quote for {}", symbol),
     )
     .await
 }
@@ -36,7 +36,7 @@ pub async fn search_symbol(
     let res = make_request(client, BASE_URL, &format!("tickers/{}", symbol), &params).await?;
     parse_response_object::<MarketstackSearchSymbolDto>(
         res,
-        &format!("No results for symbol {symbol}"),
+        &format!("Failed to parse Marketstack symbol {}", symbol),
     )
     .await
 }

@@ -27,7 +27,7 @@ pub async fn get_quote(symbol: &str, client: &Client, api_key: &str) -> Result<A
 
     parse_response_object::<AvGlobalQuoteDto>(
         global_quote.clone(),
-        &format!("No results for symbol {}", symbol),
+        &format!("Failed to parse Alpha Vantage quote for {}", symbol),
     )
     .await
 }
@@ -49,7 +49,7 @@ pub async fn search_symbol(
 
     parse_response_array::<AvSymbolSearchDto>(
         best_matches.clone(),
-        &format!("No results for symbol {}", &symbol),
+        &format!("Failed to parse Alpha Vantage symbol {}", &symbol),
     )
     .await
 }

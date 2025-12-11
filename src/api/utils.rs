@@ -19,6 +19,9 @@ pub async fn make_request(
     }
 
     let text = res.text().await?;
+
+    // println!("{:#?}", text);
+
     let data = serde_json::from_str::<Value>(&text)
         .with_context(|| format!("JSON parse error: {}", text))?;
 

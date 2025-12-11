@@ -78,7 +78,7 @@ pub struct StockExchange {
     pub exchange_status: String,
     pub date_creation: DateInfo,
     pub date_last_update: DateInfo,
-    pub date_last_validation: DateInfo,
+    pub date_last_validation: Option<DateInfo>,
     pub date_expiry: Option<DateInfo>,
     pub comments: String,
 }
