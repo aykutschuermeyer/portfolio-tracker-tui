@@ -35,6 +35,7 @@ pub struct Portfolio {
     api_key_alpha_vantage: Option<String>,
     api_key_fmp: Option<String>,
     api_key_marketstack: Option<String>,
+    forex_map: HashMap<String, Decimal>,
 }
 
 impl Portfolio {
@@ -48,6 +49,7 @@ impl Portfolio {
             api_key_alpha_vantage: std::env::var("ALPHA_VANTAGE_API_KEY").ok(),
             api_key_fmp: std::env::var("FMP_API_KEY").ok(),
             api_key_marketstack: std::env::var("MARKETSTACK_API_KEY").ok(),
+            forex_map: HashMap::new(),
         }
     }
 
@@ -62,6 +64,7 @@ impl Portfolio {
     }
 
     pub async fn set_holdings(&mut self) -> Result<()> {
+        self.update_exchange_rates().await?;
         let tickers = sqlx::query(
             r#"
             WITH
@@ -167,10 +170,9 @@ impl Portfolio {
                 .with_context(|| missing_msg("last_price"))?;
             let price = Decimal::from_f64(last_price_f64).unwrap_or(Decimal::ZERO);
 
-            let exchange_rate_f64 = row
-                .try_get::<f64, _>("exchange_rate")
-                .with_context(|| missing_msg("exchange_rate"))?;
-            let exchange_rate = Decimal::from_f64(exchange_rate_f64).unwrap_or(dec!(1));
+            let currency = row
+                .try_get::<String, _>("currency")
+                .with_context(|| missing_msg("currency"))?;
 
             let cumulative_cost_f64 = row
                 .try_get::<f64, _>("cumulative_cost")
@@ -182,6 +184,13 @@ impl Portfolio {
             } else {
                 Decimal::ZERO
             };
+
+            let exchange_rate = self.forex_map.get(&currency).with_context(|| {
+                format!(
+                    "Failed to get exchange rate from hashmap for currency {}",
+                    currency
+                )
+            })?;
 
             let adjusted_price = price * (dec!(1) / exchange_rate);
             let market_value = (adjusted_price * quantity).round();
@@ -525,6 +534,51 @@ impl Portfolio {
         tx.commit()
             .await
             .with_context(|| "Failed to commit database transaction")?;
+
+        Ok(())
+    }
+
+    pub async fn update_exchange_rates(&mut self) -> Result<()> {
+        let missing_msg = |col: &str| format!("Missing '{}' column in holdings query", col);
+        let currency_result = sqlx::query("SELECT DISTINCT currency FROM tickers")
+            .fetch_all(&self.connection)
+            .await?;
+
+        let mut handles = Vec::new();
+        for row in currency_result.iter() {
+            let base_currency = self.base_currency.clone();
+            let client = self.client.clone();
+            let currency = row
+                .try_get::<String, _>("currency")
+                .with_context(|| missing_msg("currency"))
+                .ok();
+
+            let handle = tokio::spawn(async move {
+                let exchange_rate = match currency {
+                    Some(ref currency) => {
+                        get_exchange_rate(&currency, &base_currency, &Local::now(), &client)
+                            .await
+                            .ok()
+                    }
+                    None => None,
+                };
+                Ok::<(Option<String>, Option<Decimal>), anyhow::Error>((currency, exchange_rate))
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            match handle.await? {
+                Ok((currency, exchange_rate)) => {
+                    if let Some(currency) = currency
+                        && let Some(exchange_rate) = exchange_rate
+                    {
+                        self.forex_map.insert(currency, exchange_rate);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
 
         Ok(())
     }
