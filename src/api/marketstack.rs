@@ -14,7 +14,7 @@ pub async fn get_quote(
     api_key: &str,
 ) -> Result<Vec<MarketstackQuoteDto>> {
     let params = format!("access_key={}&symbols={}", api_key, symbol);
-    let res = make_request(client, BASE_URL, &format!("eod/{}", symbol), &params).await?;
+    let res = make_request(client, BASE_URL, "eod/latest", &params).await?;
 
     let quote = res
         .get("data")
