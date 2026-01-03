@@ -7,6 +7,8 @@ use strum_macros::EnumIter;
 
 #[derive(Clone, Debug, Getters, new)]
 pub struct Ticker {
+    id: i64,
+    asset_id: i64,
     symbol: String,
     name: String,
     currency: String,

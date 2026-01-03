@@ -152,9 +152,9 @@ impl Portfolio {
                 .with_context(|| missing_msg("industry"))?;
 
             let asset = Asset::new(
+                0,
                 name,
                 AssetType::parse_str(&asset_type_str).unwrap_or(AssetType::Stock),
-                Vec::new(),
                 isin,
                 sector,
                 industry,
@@ -258,6 +258,9 @@ impl Portfolio {
             let ticker_id = row
                 .try_get::<i64, _>("id")
                 .with_context(|| missing_msg("id"))?;
+            let asset_id = row
+                .try_get::<i64, _>("asset_id")
+                .with_context(|| missing_msg("asset_id"))?;
             let name = row
                 .try_get::<String, _>("name")
                 .with_context(|| missing_msg("name"))?;
@@ -278,6 +281,8 @@ impl Portfolio {
                 .with_context(|| missing_msg("api"))?;
 
             let ticker = Ticker::new(
+                ticker_id,
+                asset_id,
                 symbol.clone(),
                 name,
                 currency,
@@ -486,10 +491,11 @@ impl Portfolio {
             };
 
             let mut transaction = Transaction::new(
+                0,
+                ticker_id,
                 transaction_no,
                 date,
                 transaction_type.clone(),
-                ticker.clone(),
                 broker.clone(),
                 currency.clone(),
                 exchange_rate,
@@ -503,7 +509,7 @@ impl Portfolio {
             let (mut amounts, mut quantities): (Vec<Decimal>, Vec<Decimal>) = transactions
                 .iter()
                 .filter(|t| {
-                    t.ticker().symbol() == ticker.symbol()
+                    t.ticker_id() == ticker.id()
                         && (*t.transaction_type() == TransactionType::Buy
                             || *t.transaction_type() == TransactionType::Sell)
                         && t.broker() == &broker
@@ -605,9 +611,9 @@ impl Portfolio {
             let handle = tokio::spawn(async move {
                 let ticker = find_ticker(&symbol_clone, &client, &provider).await?;
                 let asset = Asset::new(
+                    0,
                     ticker.name().to_string(),
                     AssetType::Stock,
-                    Vec::new(),
                     None,
                     None,
                     None,

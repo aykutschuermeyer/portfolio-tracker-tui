@@ -49,6 +49,8 @@ pub struct FmpSearchSymbolDto {
 impl FmpSearchSymbolDto {
     pub fn to_ticker(&self) -> Ticker {
         Ticker::new(
+            0,
+            0,
             self.symbol.clone(),
             self.name.clone(),
             self.currency.clone(),

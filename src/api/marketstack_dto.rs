@@ -50,6 +50,8 @@ pub struct MarketstackSearchSymbolDto {
 impl MarketstackSearchSymbolDto {
     pub fn to_ticker(&self) -> Result<Ticker> {
         Ok(Ticker::new(
+            0,
+            0,
             self.symbol.clone(),
             self.name.clone(),
             get_currency_from_country_code(&self.stock_exchange().country_code)?,

@@ -5,14 +5,15 @@ use derive_new::new;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
-use super::{PositionState, Ticker, TransactionGains};
+use super::{PositionState, TransactionGains};
 
 #[derive(Clone, Debug, Getters, new)]
 pub struct Transaction {
+    id: i64,
+    ticker_id: i64,
     transaction_no: i64,
     date: DateTime<Local>,
     transaction_type: TransactionType,
-    ticker: Ticker,
     broker: String,
     currency: String,
     exchange_rate: Decimal,
