@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
-use rust_decimal::{Decimal, prelude::ToPrimitive};
-use sqlx::{Pool, Row, Sqlite};
+use chrono::{DateTime, Local, TimeZone};
+use rust_decimal::{Decimal, prelude::FromPrimitive, prelude::ToPrimitive};
+use sqlx::{Pool, Row, Sqlite, sqlite::SqliteRow};
 
-use crate::models::{Asset, Ticker, Transaction};
+use crate::models::{Asset, PositionState, Ticker, Transaction, TransactionGains, TransactionType};
 
 pub async fn insert_ticker(
     ticker: &Ticker,
@@ -135,4 +136,84 @@ pub async fn truncate_tables(connection: &Pool<Sqlite>, clear_assets: bool) -> R
     tx.commit().await?;
 
     Ok(())
+}
+
+pub fn parse_i64_from_row(row: &SqliteRow, column: &str) -> Result<i64> {
+    row.try_get::<i64, _>(column)
+        .with_context(|| format!("Failed to parse i64 from column '{}'", column))
+}
+
+pub fn parse_string_from_row(row: &SqliteRow, column: &str) -> Result<String> {
+    row.try_get::<String, _>(column)
+        .with_context(|| format!("Failed to parse String from column '{}'", column))
+}
+
+pub fn parse_f64_from_row(row: &SqliteRow, column: &str) -> Result<f64> {
+    let value: f64 = row
+        .try_get(column)
+        .with_context(|| format!("Failed to parse f64 from column '{}'", column))?;
+    Ok(value)
+}
+
+pub fn parse_decimal_from_row(row: &SqliteRow, column: &str) -> Result<Decimal> {
+    let value = parse_f64_from_row(row, column)?;
+    Decimal::from_f64(value)
+        .with_context(|| format!("Failed to convert f64 to Decimal for column '{}'", column))
+}
+
+pub fn parse_datetime_from_row(row: &SqliteRow, column: &str) -> Result<DateTime<Local>> {
+    let timestamp: i64 = row
+        .try_get(column)
+        .with_context(|| format!("Failed to parse timestamp from column '{}'", column))?;
+    Local.timestamp_opt(timestamp, 0).single().with_context(|| {
+        format!(
+            "Failed to convert timestamp to DateTime for column '{}'",
+            column
+        )
+    })
+}
+
+pub fn parse_transaction_type_from_row(row: &SqliteRow, column: &str) -> Result<TransactionType> {
+    let type_str = parse_string_from_row(row, column)?;
+    TransactionType::parse_str(&type_str)
+        .with_context(|| format!("Failed to parse TransactionType from column '{}'", column))
+}
+
+pub fn parse_transaction(row: SqliteRow) -> Result<Transaction> {
+    let id = parse_i64_from_row(&row, "id")?;
+    let ticker_id = parse_i64_from_row(&row, "ticker_id")?;
+    let transaction_no = parse_i64_from_row(&row, "transaction_no")?;
+    let date = parse_datetime_from_row(&row, "transaction_date")?;
+    let transaction_type = parse_transaction_type_from_row(&row, "transaction_type")?;
+    let broker = parse_string_from_row(&row, "broker")?;
+    let currency = parse_string_from_row(&row, "currency")?;
+    let exchange_rate = parse_decimal_from_row(&row, "exchange_rate")?;
+    let quantity = parse_decimal_from_row(&row, "quantity")?;
+    let price = parse_decimal_from_row(&row, "price")?;
+    let fees = parse_decimal_from_row(&row, "fees")?;
+
+    let cumulative_units = parse_decimal_from_row(&row, "cumulative_units")?;
+    let cumulative_cost = parse_decimal_from_row(&row, "cumulative_cost")?;
+    let cost_of_units_sold = parse_decimal_from_row(&row, "cost_of_units_sold")?;
+    let position_state = PositionState::new(cumulative_units, cumulative_cost, cost_of_units_sold);
+
+    let realized_gains = parse_decimal_from_row(&row, "realized_gains")?;
+    let dividends_collected = parse_decimal_from_row(&row, "dividends_collected")?;
+    let transaction_gains = TransactionGains::new(realized_gains, dividends_collected);
+
+    Ok(Transaction::new(
+        id,
+        ticker_id,
+        transaction_no,
+        date,
+        transaction_type,
+        broker,
+        currency,
+        exchange_rate,
+        quantity,
+        price,
+        fees,
+        Some(position_state),
+        Some(transaction_gains),
+    ))
 }

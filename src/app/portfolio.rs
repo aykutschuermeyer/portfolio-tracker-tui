@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Local};
+use chrono::Local;
 use csv::Reader;
 use derive_getters::Getters;
 use reqwest::Client;
-use rust_decimal::{
-    Decimal,
-    prelude::{FromPrimitive, ToPrimitive},
-};
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 use rust_decimal_macros::dec;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, QueryBuilder, Sqlite};
 
 use crate::{
     app::utils::get_latest_price,
-    db::utils::{insert_ticker, insert_transaction, truncate_tables},
+    db::utils::{
+        insert_ticker, insert_transaction, parse_datetime_from_row, parse_decimal_from_row,
+        parse_i64_from_row, parse_string_from_row, parse_transaction, truncate_tables,
+    },
     models::{
         Asset, AssetType, Holding, Ticker, Transaction, TransactionType, ticker::ApiProvider,
     },
@@ -132,24 +132,12 @@ impl Portfolio {
 
         let mut holdings: Vec<Holding> = Vec::new();
 
-        let missing_msg = |col: &str| format!("Missing '{}' column in holdings query", col);
-
         for row in tickers.iter() {
-            let name = row
-                .try_get::<String, _>("name")
-                .with_context(|| missing_msg("name"))?;
-            let asset_type_str = row
-                .try_get::<String, _>("asset_type")
-                .with_context(|| missing_msg("asset_type"))?;
-            let isin = row
-                .try_get::<Option<String>, _>("isin")
-                .with_context(|| missing_msg("isin"))?;
-            let sector = row
-                .try_get::<Option<String>, _>("sector")
-                .with_context(|| missing_msg("sector"))?;
-            let industry = row
-                .try_get::<Option<String>, _>("industry")
-                .with_context(|| missing_msg("industry"))?;
+            let name = parse_string_from_row(row, "name")?;
+            let asset_type_str = parse_string_from_row(row, "asset_type")?;
+            let isin = parse_string_from_row(row, "isin").ok();
+            let sector = parse_string_from_row(row, "sector").ok();
+            let industry = parse_string_from_row(row, "industry").ok();
 
             let asset = Asset::new(
                 0,
@@ -160,24 +148,10 @@ impl Portfolio {
                 industry,
             );
 
-            let cumulative_units_f64 = row
-                .try_get::<f64, _>("cumulative_units")
-                .with_context(|| missing_msg("cumulative_units"))?;
-            let quantity = Decimal::from_f64(cumulative_units_f64).unwrap_or(Decimal::ZERO);
-
-            let last_price_f64 = row
-                .try_get::<f64, _>("last_price")
-                .with_context(|| missing_msg("last_price"))?;
-            let price = Decimal::from_f64(last_price_f64).unwrap_or(Decimal::ZERO);
-
-            let currency = row
-                .try_get::<String, _>("currency")
-                .with_context(|| missing_msg("currency"))?;
-
-            let cumulative_cost_f64 = row
-                .try_get::<f64, _>("cumulative_cost")
-                .with_context(|| missing_msg("cumulative_cost"))?;
-            let total_cost = Decimal::from_f64(cumulative_cost_f64).unwrap_or(Decimal::ZERO);
+            let quantity = parse_decimal_from_row(row, "cumulative_units")?;
+            let price = parse_decimal_from_row(row, "last_price")?;
+            let currency = parse_string_from_row(row, "currency")?;
+            let total_cost = parse_decimal_from_row(row, "cumulative_cost")?;
 
             let cost_per_share = if quantity != Decimal::ZERO {
                 (total_cost / quantity).round_dp(4)
@@ -202,16 +176,8 @@ impl Portfolio {
                 Decimal::ZERO
             };
 
-            let realized_gains_f64 = row
-                .try_get::<f64, _>("realized_gains")
-                .with_context(|| missing_msg("realized_gains"))?;
-            let realized_gain = Decimal::from_f64(realized_gains_f64).unwrap_or(Decimal::ZERO);
-
-            let dividends_collected_f64 = row
-                .try_get::<f64, _>("dividends_collected")
-                .with_context(|| missing_msg("dividends_collected"))?;
-            let dividends_collected =
-                Decimal::from_f64(dividends_collected_f64).unwrap_or(Decimal::ZERO);
+            let realized_gain = parse_decimal_from_row(row, "realized_gains")?;
+            let dividends_collected = parse_decimal_from_row(row, "dividends_collected")?;
 
             let total_gain = unrealized_gain + realized_gain + dividends_collected;
 
@@ -248,37 +214,17 @@ impl Portfolio {
         .fetch_all(&self.connection)
         .await?;
 
-        let missing_msg = |col: &str| format!("Missing '{}' column in tickers query", col);
-
         let mut ticker_map: HashMap<String, (Ticker, i64)> = HashMap::new();
         for row in tickers {
-            let symbol: String = row
-                .try_get::<String, _>("symbol")
-                .with_context(|| missing_msg("symbol"))?;
-            let ticker_id = row
-                .try_get::<i64, _>("id")
-                .with_context(|| missing_msg("id"))?;
-            let asset_id = row
-                .try_get::<i64, _>("asset_id")
-                .with_context(|| missing_msg("asset_id"))?;
-            let name = row
-                .try_get::<String, _>("name")
-                .with_context(|| missing_msg("name"))?;
-            let currency = row
-                .try_get::<String, _>("currency")
-                .with_context(|| missing_msg("currency"))?;
-            let exchange = row
-                .try_get("exchange")
-                .with_context(|| missing_msg("exchange"))?;
-            let last_price_f64 = row
-                .try_get::<f64, _>("last_price")
-                .with_context(|| missing_msg("last_price"))?;
-            let last_price_updated_at = row
-                .try_get::<Option<DateTime<Local>>, _>("last_price_updated_at")
-                .with_context(|| missing_msg("last_price_updated_at"))?;
-            let api_str = row
-                .try_get::<&str, _>("api")
-                .with_context(|| missing_msg("api"))?;
+            let symbol = parse_string_from_row(&row, "symbol")?;
+            let ticker_id = parse_i64_from_row(&row, "id")?;
+            let asset_id = parse_i64_from_row(&row, "asset_id")?;
+            let name = parse_string_from_row(&row, "name")?;
+            let currency = parse_string_from_row(&row, "currency")?;
+            let exchange = parse_string_from_row(&row, "exchange").ok();
+            let last_price = parse_decimal_from_row(&row, "last_price").ok();
+            let last_price_updated_at = parse_datetime_from_row(&row, "last_price_updated_at").ok();
+            let api_str = parse_string_from_row(&row, "api")?;
 
             let ticker = Ticker::new(
                 ticker_id,
@@ -287,9 +233,9 @@ impl Portfolio {
                 name,
                 currency,
                 exchange,
-                Decimal::from_f64(last_price_f64),
+                last_price,
                 last_price_updated_at,
-                ApiProvider::parse_str(api_str)?,
+                ApiProvider::parse_str(&api_str)?,
             );
             ticker_map.insert(symbol, (ticker, ticker_id));
         }
@@ -303,17 +249,11 @@ impl Portfolio {
                 .fetch_all(&self.connection)
                 .await?;
 
-        let missing_msg = |col: &str| format!("Missing '{}' column in transactions query", col);
-
         let mut forex_map: HashMap<i64, Decimal> = HashMap::new();
         for row in transaction_forex {
-            let txn_no = row
-                .try_get::<i64, _>("transaction_no")
-                .with_context(|| missing_msg("transaction_no"))?;
-            let exchange_rate_f64 = row
-                .try_get::<f64, _>("exchange_rate")
-                .with_context(|| missing_msg("exchange_rate"))?;
-            let x_rate = Decimal::from_f64(exchange_rate_f64).unwrap_or(Decimal::ZERO);
+            let txn_no = parse_i64_from_row(&row, "transaction_no")?;
+            let x_rate = parse_decimal_from_row(&row, "exchange_rate")?;
+
             forex_map.insert(txn_no, x_rate);
         }
 
@@ -327,6 +267,52 @@ impl Portfolio {
                 .await?;
 
         Ok(result.unwrap_or(0))
+    }
+
+    async fn get_historical_transactions(&self, ticker_ids: Vec<i64>) -> Result<Vec<Transaction>> {
+        let mut query_builder = QueryBuilder::new(
+            r#"
+            SELECT
+                id,
+                ticker_id,
+                transaction_no,
+                transaction_date,
+                transaction_type,
+                broker,
+                currency,
+                exchange_rate,
+                quantity,
+                price,
+                fees
+            FROM
+                transactions
+            WHERE
+                ticker_id IN (
+            "#,
+        );
+        let mut separated = query_builder.separated(", ");
+        for id in ticker_ids {
+            separated.push_bind(id);
+        }
+        separated.push_unseparated(
+            r#"
+                )
+                AND transaction_type IN ('Buy', 'Sell')
+            ORDER BY
+                transaction_no ASC
+            "#,
+        );
+
+        let rows = query_builder.build().fetch_all(&self.connection).await?;
+
+        let mut transactions = Vec::new();
+
+        for row in rows {
+            let transaction = parse_transaction(row)?;
+            transactions.push(transaction);
+        }
+
+        Ok(transactions)
     }
 
     pub async fn import_transactions(&mut self, path: &str, api: &ApiProvider) -> Result<()> {
@@ -362,6 +348,9 @@ impl Portfolio {
         ticker_map = self
             .update_tickers(&unique_symbols, &mut ticker_map, api)
             .await?;
+        let ticker_ids = ticker_map.values().map(|val| val.1).collect();
+
+        let hist_transactions = self.get_historical_transactions(ticker_ids).await?;
 
         let mut reader = Reader::from_path(path)
             .with_context(|| format!("Failed to reopen CSV file at path: {}", path))?;
@@ -506,17 +495,18 @@ impl Portfolio {
                 None,
             );
 
-            let (mut amounts, mut quantities): (Vec<Decimal>, Vec<Decimal>) = transactions
-                .iter()
-                .filter(|t| {
-                    t.ticker_id() == ticker.id()
-                        && (*t.transaction_type() == TransactionType::Buy
-                            || *t.transaction_type() == TransactionType::Sell)
-                        && t.broker() == &broker
-                        && t.currency() == currency
-                })
-                .map(|t| (t.get_amount(), t.get_quantity()))
-                .unzip();
+            let mut amounts = Vec::new();
+            let mut quantities = Vec::new();
+
+            for t in hist_transactions.iter().filter(|t| {
+                t.ticker_id() == ticker.id()
+                    && (*t.transaction_type() == TransactionType::Buy
+                        || *t.transaction_type() == TransactionType::Sell)
+                    && t.broker() == &broker
+            }) {
+                amounts.push(t.get_amount());
+                quantities.push(t.get_quantity());
+            }
 
             amounts.push(transaction.get_amount());
             quantities.push(transaction.get_quantity());
@@ -545,7 +535,6 @@ impl Portfolio {
     }
 
     pub async fn update_exchange_rates(&mut self) -> Result<()> {
-        let missing_msg = |col: &str| format!("Missing '{}' column in holdings query", col);
         let currency_result = sqlx::query("SELECT DISTINCT currency FROM tickers")
             .fetch_all(&self.connection)
             .await?;
@@ -554,10 +543,7 @@ impl Portfolio {
         for row in currency_result.iter() {
             let base_currency = self.base_currency.clone();
             let client = self.client.clone();
-            let currency = row
-                .try_get::<String, _>("currency")
-                .with_context(|| missing_msg("currency"))
-                .ok();
+            let currency = parse_string_from_row(row, "currency").ok();
 
             let handle = tokio::spawn(async move {
                 let exchange_rate = match currency {
@@ -645,18 +631,11 @@ impl Portfolio {
             .fetch_all(&self.connection)
             .await?;
 
-        let missing_msg = |col: &str| format!("Missing '{}' column in tickers query", col);
-
         let mut ticker_data = Vec::new();
         for row in tickers {
-            let symbol = row
-                .try_get::<&str, _>("symbol")
-                .with_context(|| missing_msg("symbol"))?
-                .to_string();
-            let api_str = row
-                .try_get::<&str, _>("api")
-                .with_context(|| missing_msg("api"))?;
-            let api = ApiProvider::parse_str(api_str)?;
+            let symbol = parse_string_from_row(&row, "symbol")?;
+            let api_str = parse_string_from_row(&row, "api")?;
+            let api = ApiProvider::parse_str(&api_str)?;
             ticker_data.push((symbol, api));
         }
 
