@@ -93,16 +93,16 @@ pub fn calculate_transaction_gains(
     transaction: &Transaction,
     position_state: &PositionState,
 ) -> TransactionGains {
-    let mut realized_gains = Decimal::ZERO;
-    let mut dividends_collected = Decimal::ZERO;
+    let mut realized_gain = Decimal::ZERO;
+    let mut dividend = Decimal::ZERO;
 
     if transaction.transaction_type() == &TransactionType::Sell {
-        realized_gains = transaction.get_amount().abs() - position_state.cost_of_units_sold();
+        realized_gain = transaction.get_amount().abs() - position_state.cost_of_units_sold();
     }
 
     if transaction.transaction_type() == &TransactionType::Div {
-        dividends_collected = transaction.get_amount();
+        dividend = transaction.get_amount();
     }
 
-    TransactionGains::new(realized_gains, dividends_collected)
+    TransactionGains::new(realized_gain, dividend)
 }

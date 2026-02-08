@@ -230,9 +230,9 @@ impl App {
                         self.selection_mode = true;
                     }
                     Some(1) => {
-                        // Clear transactions and holdings
+                        // Clear transactions and positions
                         self.portfolio.reset(false).await?;
-                        self.portfolio.set_holdings().await?;
+                        self.portfolio.set_positions().await?;
                         self.popup_manager.show_database_reset = false;
                         self.selection_mode = true;
                         self.render_ui(terminal)?;
@@ -240,7 +240,7 @@ impl App {
                     Some(2) => {
                         // Clear everything including tickers
                         self.portfolio.reset(true).await?;
-                        self.portfolio.set_holdings().await?;
+                        self.portfolio.set_positions().await?;
                         self.popup_manager.show_database_reset = false;
                         self.selection_mode = true;
                         self.render_ui(terminal)?;
@@ -257,17 +257,17 @@ impl App {
         if !self.popup_manager.has_any_popup() {
             self.selection_mode = true;
         }
-        let holdings = self.portfolio.holdings();
-        if holdings.is_empty() {
+        let positions = self.portfolio.positions();
+        if positions.is_empty() {
             return;
         }
 
         match key_code {
             KeyCode::Down => {
-                Self::navigate_down(&mut self.table_state, holdings.len());
+                Self::navigate_down(&mut self.table_state, positions.len());
             }
             KeyCode::Up => {
-                Self::navigate_up(&mut self.table_state, holdings.len());
+                Self::navigate_up(&mut self.table_state, positions.len());
             }
             _ => {}
         }
@@ -290,7 +290,7 @@ impl App {
             .import_transactions(&csv_path_expanded, &default_api)
             .await;
         let update_result = self.portfolio.update_prices().await;
-        let holdings_result = self.portfolio.set_holdings().await;
+        let positions_result = self.portfolio.set_positions().await;
 
         self.popup_manager.clear_message();
         self.render_ui(terminal)?;
@@ -301,9 +301,9 @@ impl App {
         } else if let Err(e) = update_result {
             self.popup_manager
                 .show_error(&format!("Error updating prices: {:?}", e));
-        } else if let Err(e) = holdings_result {
+        } else if let Err(e) = positions_result {
             self.popup_manager
-                .show_error(&format!("Error updating holdings: {:?}", e));
+                .show_error(&format!("Error updating positions: {:?}", e));
         }
 
         Ok(())
@@ -315,7 +315,7 @@ impl App {
         self.render_ui(terminal)?;
 
         let update_result = self.portfolio.update_prices().await;
-        let holdings_result = self.portfolio.set_holdings().await;
+        let positions_result = self.portfolio.set_positions().await;
 
         self.popup_manager.clear_message();
         self.render_ui(terminal)?;
@@ -323,9 +323,9 @@ impl App {
         if let Err(e) = update_result {
             self.popup_manager
                 .show_error(&format!("Error updating prices: {:?}", e));
-        } else if let Err(e) = holdings_result {
+        } else if let Err(e) = positions_result {
             self.popup_manager
-                .show_error(&format!("Error updating holdings: {:?}", e));
+                .show_error(&format!("Error updating positions: {:?}", e));
         }
 
         Ok(())

@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 use super::Asset;
 
 #[derive(Clone, Debug, Getters, new)]
-pub struct Holding {
+pub struct Position {
     asset: Asset,
     quantity: Decimal,
     price: Decimal,
@@ -15,6 +15,6 @@ pub struct Holding {
     unrealized_gain: Decimal,
     unrealized_gain_percent: Decimal,
     realized_gain: Decimal,
-    dividends_collected: Decimal,
+    dividend: Decimal,
     total_gain: Decimal,
 }

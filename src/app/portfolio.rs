@@ -16,7 +16,7 @@ use crate::{
         parse_i64_from_row, parse_string_from_row, parse_transaction, truncate_tables,
     },
     models::{
-        Asset, AssetType, Holding, Ticker, Transaction, TransactionType, ticker::ApiProvider,
+        Asset, AssetType, Position, Ticker, Transaction, TransactionType, ticker::ApiProvider,
     },
 };
 
@@ -29,7 +29,7 @@ use super::{
 pub struct Portfolio {
     base_currency: String,
     connection: Pool<Sqlite>,
-    holdings: Vec<Holding>,
+    positions: Vec<Position>,
     client: Client,
     default_api: ApiProvider,
     api_key_alpha_vantage: Option<String>,
@@ -43,7 +43,7 @@ impl Portfolio {
         Self {
             base_currency,
             connection,
-            holdings: Vec::new(),
+            positions: Vec::new(),
             client: Client::new(),
             default_api: ApiProvider::AlphaVantage,
             api_key_alpha_vantage: std::env::var("ALPHA_VANTAGE_API_KEY").ok(),
@@ -63,17 +63,17 @@ impl Portfolio {
         self.default_api = api;
     }
 
-    pub async fn set_holdings(&mut self) -> Result<()> {
+    pub async fn set_positions(&mut self) -> Result<()> {
         self.update_exchange_rates().await?;
         let tickers = sqlx::query(
             r#"
             WITH
-            cte_realized_gains_dividends AS (
+            cte_realized_gain_dividends AS (
                 SELECT
                     ticker_id,
                     broker,
-                    SUM(realized_gains) as realized_gains,
-                    SUM(dividends_collected) as dividends_collected
+                    SUM(realized_gain) as realized_gain,
+                    SUM(dividend) as dividend
                 FROM
                     transactions
                 GROUP BY
@@ -109,12 +109,12 @@ impl Portfolio {
                 tnx.exchange_rate,
                 tnx.cumulative_units,
                 tnx.cumulative_cost,
-                rld.realized_gains,
-                rld.dividends_collected
+                rld.realized_gain,
+                rld.dividend
             FROM
                 cte_transactions tnx
             INNER JOIN
-                cte_realized_gains_dividends rld
+                cte_realized_gain_dividends rld
                 ON tnx.ticker_id = rld.ticker_id
                 AND tnx.broker = rld.broker
             INNER JOIN
@@ -130,7 +130,7 @@ impl Portfolio {
         .fetch_all(&self.connection)
         .await?;
 
-        let mut holdings: Vec<Holding> = Vec::new();
+        let mut positions: Vec<Position> = Vec::new();
 
         for row in tickers.iter() {
             let name = parse_string_from_row(row, "name")?;
@@ -176,12 +176,12 @@ impl Portfolio {
                 Decimal::ZERO
             };
 
-            let realized_gain = parse_decimal_from_row(row, "realized_gains")?;
-            let dividends_collected = parse_decimal_from_row(row, "dividends_collected")?;
+            let realized_gain = parse_decimal_from_row(row, "realized_gain")?;
+            let dividend = parse_decimal_from_row(row, "dividend")?;
 
-            let total_gain = unrealized_gain + realized_gain + dividends_collected;
+            let total_gain = unrealized_gain + realized_gain + dividend;
 
-            let holding = Holding::new(
+            let position = Position::new(
                 asset,
                 quantity,
                 adjusted_price,
@@ -191,15 +191,15 @@ impl Portfolio {
                 unrealized_gain,
                 unrealized_gain_percent,
                 realized_gain,
-                dividends_collected,
+                dividend,
                 total_gain,
             );
 
-            holdings.push(holding);
+            positions.push(position);
         }
 
-        self.holdings.clear();
-        self.holdings = holdings;
+        self.positions.clear();
+        self.positions = positions;
 
         Ok(())
     }

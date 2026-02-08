@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     cumulative_units REAL NOT NULL,
     cumulative_cost REAL NOT NULL,
     cost_of_units_sold REAL NOT NULL,
-    realized_gains REAL NOT NULL,
-    dividends_collected REAL NOT NULL,
+    realized_gain REAL NOT NULL,
+    dividend REAL NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 

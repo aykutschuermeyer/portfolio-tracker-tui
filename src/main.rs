@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut portfolio = Portfolio::new(String::from("EUR"), connection);
 
-    portfolio.set_holdings().await?;
+    portfolio.set_positions().await?;
 
     let mut app = App::new(portfolio);
     let csv_path = "~/.config/portfolio-tracker-tui/transactions.csv";

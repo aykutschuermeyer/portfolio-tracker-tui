@@ -93,8 +93,8 @@ pub async fn insert_transaction(
             cumulative_units,
             cumulative_cost,
             cost_of_units_sold,
-            realized_gains,
-            dividends_collected
+            realized_gain,
+            dividend
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
@@ -112,8 +112,8 @@ pub async fn insert_transaction(
     .bind(position_state.cumulative_units().round_dp(4).to_f64())
     .bind(position_state.cumulative_cost().round_dp(4).to_f64())
     .bind(position_state.cost_of_units_sold().round_dp(4).to_f64())
-    .bind(transaction_gains.realized_gains().round_dp(4).to_f64())
-    .bind(transaction_gains.dividends_collected().round_dp(4).to_f64())
+    .bind(transaction_gains.realized_gain().round_dp(4).to_f64())
+    .bind(transaction_gains.dividend().round_dp(4).to_f64())
     .execute(&mut **tx)
     .await?
     .last_insert_rowid();
@@ -197,9 +197,9 @@ pub fn parse_transaction(row: SqliteRow) -> Result<Transaction> {
     let cost_of_units_sold = parse_decimal_from_row(&row, "cost_of_units_sold")?;
     let position_state = PositionState::new(cumulative_units, cumulative_cost, cost_of_units_sold);
 
-    let realized_gains = parse_decimal_from_row(&row, "realized_gains")?;
-    let dividends_collected = parse_decimal_from_row(&row, "dividends_collected")?;
-    let transaction_gains = TransactionGains::new(realized_gains, dividends_collected);
+    let realized_gain = parse_decimal_from_row(&row, "realized_gain")?;
+    let dividend = parse_decimal_from_row(&row, "dividend")?;
+    let transaction_gains = TransactionGains::new(realized_gain, dividend);
 
     Ok(Transaction::new(
         id,

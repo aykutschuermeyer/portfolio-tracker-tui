@@ -71,18 +71,18 @@ fn render_footer(frame: &mut Frame, area: Rect) {
     frame.render_widget(footer, area);
 }
 
-fn render_holdings_table(
+fn render_positions_table(
     frame: &mut Frame,
     portfolio: &Portfolio,
     table_state: &mut TableState,
     selection_mode: bool,
     area: Rect,
 ) {
-    let holdings = portfolio.holdings();
+    let positions = portfolio.positions();
 
-    if holdings.is_empty() {
+    if positions.is_empty() {
         let empty_message =
-            Paragraph::new("No holdings to display. Press F4 to import transactions.")
+            Paragraph::new("No positions to display. Press F4 to import transactions.")
                 .style(Style::default().fg(Color::Yellow))
                 .block(Block::default().borders(Borders::ALL));
         frame.render_widget(empty_message, area);
@@ -105,7 +105,7 @@ fn render_holdings_table(
     .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow)));
     let header = Row::new(header_cells).style(Style::default()).height(1);
 
-    let rows = holdings.iter().map(|position| {
+    let rows = positions.iter().map(|position| {
         let (unrealized_gain_str, color_unrealized) =
             format_colored_gain(*position.unrealized_gain());
         let (unrealized_percent_str, color_unrealized_percent) =
@@ -122,7 +122,7 @@ fn render_holdings_table(
             Cell::from(unrealized_gain_str).style(Style::default().fg(color_unrealized)),
             Cell::from(unrealized_percent_str).style(Style::default().fg(color_unrealized_percent)),
             Cell::from(realized_gain_str).style(Style::default().fg(color_realized)),
-            Cell::from(format!("{:.2}", position.dividends_collected()))
+            Cell::from(format!("{:.2}", position.dividend()))
                 .style(Style::default().fg(Color::Green)),
             Cell::from(total_gain_str).style(Style::default().fg(color_total)),
         ];
@@ -210,7 +210,7 @@ fn render_database_reset_popup(frame: &mut Frame, default_reset_state: &mut List
     let area = centered_rect(60, 25, frame.area());
     let items = vec![
         ListItem::new("Cancel"),
-        ListItem::new("Clear transactions and holdings"),
+        ListItem::new("Clear transactions and positions"),
         ListItem::new("Clear everything including tickers"),
     ];
     let list = List::new(items)
@@ -252,7 +252,7 @@ pub fn render(
         .split(frame.area());
 
     render_title(frame, portfolio, chunks[0]);
-    render_holdings_table(frame, portfolio, table_state, selection_mode, chunks[1]);
+    render_positions_table(frame, portfolio, table_state, selection_mode, chunks[1]);
     render_footer(frame, chunks[2]);
 
     if let Some(message) = popup_message {
