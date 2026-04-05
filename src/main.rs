@@ -24,7 +24,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     portfolio.set_positions().await?;
 
     let mut app = App::new(portfolio);
-    let csv_path = "~/.config/portfolio-tracker-tui/transactions.csv";
+    let csv_path = shellexpand::tilde("~/.config/portfolio-tracker-tui/transactions.csv");
+    let config_dir = shellexpand::tilde("~/.config/portfolio-tracker-tui");
+    if !fs::exists(&*csv_path)? {
+        fs::create_dir(&*config_dir)?;
+        fs::copy("./sample_data/transactions.csv", &*csv_path)?;
+    }
     app.run(&csv_path).await?;
 
     Ok(())

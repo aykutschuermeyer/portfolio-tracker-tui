@@ -45,7 +45,7 @@ impl Portfolio {
             connection,
             positions: Vec::new(),
             client: Client::new(),
-            default_api: ApiProvider::AlphaVantage,
+            default_api: ApiProvider::Marketstack,
             api_key_alpha_vantage: std::env::var("ALPHA_VANTAGE_API_KEY").ok(),
             api_key_fmp: std::env::var("FMP_API_KEY").ok(),
             api_key_marketstack: std::env::var("MARKETSTACK_API_KEY").ok(),
