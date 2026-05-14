@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use chrono::{DateTime, Local, TimeZone};
 use reqwest::Client;
 use rust_decimal::Decimal;
@@ -86,7 +86,13 @@ pub async fn get_latest_price(symbol: &str, client: &Client, api: &ApiProvider) 
             let first = marketstack_quote_result
                 .first()
                 .with_context(|| "Failed to get first entry")?;
-            Ok(*first.close())
+            if let Some(close) = *first.close() {
+                Ok(close)
+            } else if let Some(open) = *first.open() {
+                Ok(open)
+            } else {
+                Err(Error::msg("Price is null"))
+            }
         }
     }
 }
